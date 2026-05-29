@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Generate Soundiiz and TuneMyMusic imports from Fortnite Festival Jam Tracks." />
+  <title>Fortnite Jam Tracks Playlist Exporter</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <nav class="nav" aria-label="Page navigation">
+      <a href="#export">Export</a>
+      <a href="#review">Review</a>
+      <a href="#notfound">Not-found helper</a>
+      <a href="https://github.com/FNFestival/fnfestival.github.io" target="_blank" rel="noreferrer">Data source</a>
+    </nav>
+
+    <div class="hero-grid">
+      <section>
+        <p class="eyebrow">Fortnite Festival utility</p>
+        <h1>Jam Tracks → Spotify playlist import</h1>
+        <p class="lede">
+          Build a clean Soundiiz or TuneMyMusic import from the current Fortnite Festival Jam Track catalog.
+          The default preset keeps real-world streaming songs and skips Fortnite-made originals, remixes, and hard-to-match library tracks.
+        </p>
+        <div class="hero-actions">
+          <button id="fetchButton" class="button primary">Fetch latest tracks</button>
+          <button id="sampleButton" class="button ghost">Load demo data</button>
+        </div>
+        <p class="source-note" id="sourceStatus">No data loaded yet.</p>
+      </section>
+
+      <aside class="stats-card" aria-label="Playlist summary">
+        <div>
+          <span class="stat-number" id="includedCount">0</span>
+          <span class="stat-label">included</span>
+        </div>
+        <div>
+          <span class="stat-number" id="reviewCount">0</span>
+          <span class="stat-label">review</span>
+        </div>
+        <div>
+          <span class="stat-number" id="excludedCount">0</span>
+          <span class="stat-label">excluded</span>
+        </div>
+      </aside>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel" id="export">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Step 1</p>
+          <h2>Choose what “real songs” means</h2>
+        </div>
+        <div class="badge" id="dataBadge">Waiting for data</div>
+      </div>
+
+      <div class="control-grid">
+        <label class="field">
+          <span>Playlist preset</span>
+          <select id="presetSelect">
+            <option value="recommended">Recommended Spotify playlist</option>
+            <option value="broad">Broad: include hard-to-match licensed tracks</option>
+            <option value="complete">Complete: include every Jam Track</option>
+            <option value="custom">Custom</option>
+          </select>
+          <small id="presetHelp">Real-world streaming tracks only. Excludes Epic/Fortnite originals, Fortnite remixes/rearrangements, and stock/library tracks that usually fail on Spotify.</small>
+        </label>
+
+        <label class="field">
+          <span>Sort order</span>
+          <select id="sortSelect">
+            <option value="addedAsc">Fortnite added date, oldest first</option>
+            <option value="addedDesc">Fortnite added date, newest first</option>
+            <option value="titleAsc">Title A–Z</option>
+            <option value="artistAsc">Artist A–Z</option>
+            <option value="releaseYearAsc">Song release year</option>
+          </select>
+          <small>Uses the dataset’s <code>createdAt</code> field. Older imported tracks may share the same initial date.</small>
+        </label>
+
+        <label class="field">
+          <span>Export target</span>
+          <select id="targetSelect">
+            <option value="soundiiz">Soundiiz CSV</option>
+            <option value="tunemymusicText">TuneMyMusic text</option>
+            <option value="tunemymusicCsv">TuneMyMusic CSV</option>
+            <option value="reviewCsv">Review CSV</option>
+          </select>
+          <small>Soundiiz uses <code>title,artist,album,isrc,</code>. TuneMyMusic works well with plain “Artist - Title” upload text.</small>
+        </label>
+      </div>
+
+      <details class="advanced">
+        <summary>Advanced filter switches</summary>
+        <div class="switch-grid">
+          <label><input type="checkbox" id="includeOriginals"> Include Epic/Fortnite originals</label>
+          <label><input type="checkbox" id="includeFortniteEdits"> Include Fortnite remixes/rearrangements</label>
+          <label><input type="checkbox" id="includeAmbiguous"> Include hard-to-match library/stock tracks</label>
+          <label><input type="checkbox" id="requirePreview"> Require a Spotify preview URL in the dataset</label>
+          <label><input type="checkbox" id="useAliases" checked> Apply matching aliases for import tools</label>
+          <label><input type="checkbox" id="includeReviewInExport"> Include review-bucket tracks in the main export</label>
+        </div>
+      </details>
+
+      <div class="actions-row">
+        <button id="copyButton" class="button">Copy export</button>
+        <button id="downloadButton" class="button primary">Download export</button>
+        <button id="downloadAllButton" class="button ghost">Download all files</button>
+      </div>
+
+      <label class="field output-field">
+        <span id="outputLabel">Export preview</span>
+        <textarea id="outputText" spellcheck="false" readonly placeholder="Fetch tracks to generate the playlist export…"></textarea>
+      </label>
+    </section>
+
+    <section class="panel" id="review">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Step 2</p>
+          <h2>Review the filter decisions</h2>
+        </div>
+        <input id="searchInput" class="search" type="search" placeholder="Search title, artist, reason…" />
+      </div>
+      <div class="table-wrap" role="region" aria-label="Track review table" tabindex="0">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Track</th>
+              <th>Artist</th>
+              <th>Added</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="trackTableBody">
+            <tr><td colspan="5" class="empty">Fetch tracks to see review decisions.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="notfound">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Optional</p>
+          <h2>Soundiiz not-found helper</h2>
+        </div>
+      </div>
+      <p>
+        Paste Soundiiz’s exported not-found CSV here. The app will suggest cleaner retry searches using the same alias rules,
+        which helps with Disney, Japanese titles, soundtrack names, and Fortnite-censored titles.
+      </p>
+      <label class="field">
+        <span>Paste Soundiiz not-found CSV</span>
+        <textarea id="notFoundInput" spellcheck="false" placeholder="title,artist,album,isrc,isFound&#10;&quot;World Is Mine&quot;,&quot;ryo (supercell) ft. Hatsune Miku&quot;,,,0"></textarea>
+      </label>
+      <div class="actions-row">
+        <button id="analyzeNotFoundButton" class="button">Analyze not-found CSV</button>
+        <button id="copyRetryButton" class="button ghost">Copy retry text</button>
+      </div>
+      <label class="field output-field">
+        <span>Retry suggestions</span>
+        <textarea id="notFoundOutput" spellcheck="false" readonly></textarea>
+      </label>
+    </section>
+  </main>
+
+  <footer>
+    <p>
+      This fan-made tool is not affiliated with Epic Games, Fortnite, Spotify, Soundiiz, or TuneMyMusic.
+      Data is fetched client-side from the public FNFestival dataset.
+    </p>
+  </footer>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
