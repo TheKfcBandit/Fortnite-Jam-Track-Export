@@ -6,7 +6,7 @@ It is designed for GitHub Pages: no build step, no API key, no backend, and no a
 
 ## Features
 
-- Fetches the current Jam Track data client-side from the maintained FNFestival `tracks.json` dataset.
+- Auto-fetches the current Jam Track data client-side from the maintained FNFestival `tracks.json` dataset, with a manual refresh button.
 - Exports:
   - Soundiiz CSV: `title,artist,album,isrc,`
   - TuneMyMusic plain text: `Artist - Title`
@@ -19,6 +19,7 @@ It is designed for GitHub Pages: no build step, no API key, no backend, and no a
   - excludes Fortnite-specific remixes and rearrangements
   - puts hard-to-match library/stock tracks in review instead of pretending they will import cleanly
 - Applies matching aliases for known import misses, including soundtrack titles, Japanese titles, featured-artist formatting, and Fortnite-censored display titles.
+- Includes a custom exclude regex for personal filtering, matched against title, artist, id, year, and filter reasons.
 - Includes a Soundiiz not-found helper: paste Soundiiz's `isFound=0` CSV and get retry searches.
 
 ## Host on GitHub Pages
@@ -63,6 +64,17 @@ Still excludes Fortnite/Epic originals and Fortnite-specific edits, but includes
 
 Exports every Jam Track in the dataset. Useful for archival lists, not ideal for Spotify.
 
+### Custom regex
+
+Open **Advanced filter switches** and use **Custom exclude regex** to remove extra entries without editing the code. Examples:
+
+```text
+Slipstream Music|Bruno-San
+/Fortnite Rearrangement|Epic Games/i
+```
+
+The regex is matched against each track's title, artist, id, release year, added date, and generated filter reasons. Invalid regex is ignored and shown as an inline error.
+
 ## Matching aliases
 
 Aliases are intentionally small and readable. They do not claim to be perfect Spotify metadata. They exist to improve import-tool search queries for known difficult entries, such as:
@@ -84,6 +96,8 @@ The app uses the dataset's `createdAt` field for “added to Fortnite” sorting
 ├── assets
 │   ├── app.js
 │   └── styles.css
+├── .nojekyll
+├── LICENSE
 └── README.md
 ```
 

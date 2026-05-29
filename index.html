@@ -22,11 +22,9 @@
         <h1>Jam Tracks → Spotify playlist import</h1>
         <p class="lede">
           Build a clean Soundiiz or TuneMyMusic import from the current Fortnite Festival Jam Track catalog.
-          The default preset keeps real-world streaming songs and skips Fortnite-made originals, remixes, and hard-to-match library tracks.
         </p>
         <div class="hero-actions">
-          <button id="fetchButton" class="button primary">Fetch latest tracks</button>
-          <button id="sampleButton" class="button ghost">Load demo data</button>
+          <button id="fetchButton" class="button primary">Refresh latest tracks</button>
         </div>
         <p class="source-note" id="sourceStatus">No data loaded yet.</p>
       </section>
@@ -67,7 +65,7 @@
             <option value="complete">Complete: include every Jam Track</option>
             <option value="custom">Custom</option>
           </select>
-          <small id="presetHelp">Real-world streaming tracks only. Excludes Epic/Fortnite originals, Fortnite remixes/rearrangements, and stock/library tracks that usually fail on Spotify.</small>
+          <small id="presetHelp">Balanced export for streaming services: real artist tracks by default, with edge cases sent to review.</small>
         </label>
 
         <label class="field">
@@ -104,6 +102,13 @@
           <label><input type="checkbox" id="useAliases" checked> Apply matching aliases for import tools</label>
           <label><input type="checkbox" id="includeReviewInExport"> Include review-bucket tracks in the main export</label>
         </div>
+
+        <label class="field regex-field">
+          <span>Custom exclude regex</span>
+          <input id="customRegex" type="text" spellcheck="false" placeholder="Epic Games|Fortnite Rearrangement|Slipstream Music" />
+          <small>Optional. Matches title, artist, id, year, and filter reasons. Use plain text regex or <code>/pattern/flags</code>.</small>
+          <small id="customRegexError" class="field-error" aria-live="polite"></small>
+        </label>
       </details>
 
       <div class="actions-row">
