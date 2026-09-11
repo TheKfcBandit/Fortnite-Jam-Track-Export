@@ -267,28 +267,6 @@
     "lastFeatured": "2026-03-29T00:01:16.127Z",
     "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/f7/26/7a/f7267a0c-c68f-ea63-0993-958686ce7aa7/mzaf_355220326730073745.plus.aac.p.m4a"
   },
-  "worldismine": {
-    "id": "worldismine",
-    "title": "World Is Mine",
-    "artist": "ryo (supercell) ft. Hatsune Miku",
-    "releaseYear": 2008,
-    "cover": "https://cdn2.unrealengine.com/t9xsbeembvwzvdu0-512x512-7b9e159582b6.jpg",
-    "bpm": 165,
-    "duration": "4m 15s",
-    "difficulties": {
-      "vocals": 4,
-      "bass": 4,
-      "guitar": 4,
-      "drums": 5,
-      "plasticVocals": 4,
-      "plasticBass": 4,
-      "plasticGuitar": 5,
-      "plasticDrums": 4
-    },
-    "createdAt": "2025-01-14T15:53:40.455Z",
-    "lastFeatured": "2026-09-11T00:01:11.675Z",
-    "previewUrl": "https://p.scdn.co/mp3-preview/3d63184820bf27e2ba0caf45f43db0b167f524ea"
-  },
   "todayisgonnabe": {
     "id": "todayisgonnabe",
     "title": "Today is Gonna be a Great Day",
@@ -487,6 +465,160 @@
     "lastFeatured": "2026-08-24T00:01:15.182Z",
     "previewUrl": "https://p.scdn.co/mp3-preview/bfed0afe24cfb5f066d4a9f8b68efb8faaac254a?cid=ace3af5515b3429d8fbf1bb99bcd1310"
   },
+  "lockedandloaded": {
+    "id": "lockedandloaded",
+    "title": "Locked & Loaded",
+    "artist": "d4vd",
+    "releaseYear": 2025,
+    "cover": "https://cdn2.unrealengine.com/lockedandloaded-art-512x512-0a510f0c55d1.jpg",
+    "bpm": 100,
+    "duration": "2m 40s",
+    "difficulties": {
+      "vocals": 4,
+      "bass": 0,
+      "guitar": 2,
+      "drums": 4,
+      "plasticVocals": 2,
+      "plasticBass": 0,
+      "plasticGuitar": 2,
+      "plasticDrums": 4
+    },
+    "createdAt": "2025-09-05T00:01:24.769Z",
+    "lastFeatured": null,
+    "previewUrl": "https://p.scdn.co/mp3-preview/6e273b20df5a821be0c97c61509ed28ffab4fb0e"
+  },
+  "abarsong": {
+    "id": "abarsong",
+    "title": "A Bar Song",
+    "artist": "Shaboozey",
+    "releaseYear": 2024,
+    "cover": "https://cdn2.unrealengine.com/lvpp6exk0grb2cob-512x512-44859c6ef959.jpg",
+    "bpm": 162,
+    "duration": "2m 54s",
+    "difficulties": {
+      "vocals": 3,
+      "bass": 0,
+      "guitar": 2,
+      "drums": 2,
+      "plasticVocals": 3,
+      "plasticBass": 0,
+      "plasticGuitar": 3,
+      "plasticDrums": 2
+    },
+    "createdAt": "2025-04-23T00:01:14.893Z",
+    "lastFeatured": "2026-08-27T00:01:30.372Z",
+    "previewUrl": "https://p.scdn.co/mp3-preview/59f68f3e96233e3c352659053dd48039790cd965"
+  },
+  "rocketman": {
+    "id": "rocketman",
+    "title": "Rocket Man",
+    "artist": "Elton John",
+    "releaseYear": 1972,
+    "cover": "https://cdn2.unrealengine.com/739pjvjqp6snp086-512x512-a960ad129a71.jpg",
+    "bpm": 137,
+    "duration": "4m 49s",
+    "difficulties": {
+      "vocals": 2,
+      "bass": 1,
+      "guitar": 4,
+      "drums": 3,
+      "plasticVocals": 3,
+      "plasticBass": 1,
+      "plasticGuitar": 4,
+      "plasticDrums": 2
+    },
+    "createdAt": "2025-10-10T00:01:47.433Z",
+    "lastFeatured": "2026-07-09T00:01:19.023Z",
+    "previewUrl": "https://p.scdn.co/mp3-preview/c7316d016815fab0bb5ecb309da33e57d4da69c5"
+  },
+  "popular": {
+    "id": "popular",
+    "title": "Popular",
+    "artist": "The Weeknd, Madonna & Playboi Carti",
+    "releaseYear": 2023,
+    "cover": "https://cdn2.unrealengine.com/p44g8btrzrhnoakn-512x512-6c15bc6c4e55.jpg",
+    "bpm": 99,
+    "duration": "3m 41s",
+    "difficulties": {
+      "vocals": 4,
+      "bass": 0,
+      "guitar": 3,
+      "drums": 4,
+      "plasticVocals": 3,
+      "plasticBass": 0,
+      "plasticGuitar": 1,
+      "plasticDrums": 3
+    },
+    "createdAt": "2024-12-26T04:08:19.835Z",
+    "lastFeatured": "2026-09-07T00:01:15.419Z",
+    "previewUrl": "https://p.scdn.co/mp3-preview/3bb12d1f2bdfd7eaf80d8502fe28806a422d8e5c"
+  },
+  "runamok": {
+    "id": "runamok",
+    "title": "Runamok",
+    "artist": "Tasty Bois (ft. Backchat)",
+    "releaseYear": 2025,
+    "cover": "https://cdn2.unrealengine.com/8baxwo7ylbwlryat-512x512-7f9fe6818f90.jpg",
+    "bpm": 109,
+    "duration": "2m 32s",
+    "difficulties": {
+      "vocals": 4,
+      "bass": 1,
+      "guitar": 0,
+      "drums": 4,
+      "plasticVocals": 0,
+      "plasticBass": 1,
+      "plasticGuitar": 0,
+      "plasticDrums": 3
+    },
+    "createdAt": "2025-02-22T00:01:30.465Z",
+    "lastFeatured": null,
+    "previewUrl": "https://p.scdn.co/mp3-preview/e9e74b27026f8e5517394fc01260a81c5428b6af"
+  },
+  "melt": {
+    "id": "melt",
+    "title": "Melt",
+    "artist": "ryo (supercell) ft. Hatsune Miku",
+    "releaseYear": 2008,
+    "cover": "https://cdn2.unrealengine.com/t9xsbeembvwzvdu0-512x512-cd74cecfad4e.jpg",
+    "bpm": 170,
+    "duration": "4m 20s",
+    "difficulties": {
+      "vocals": 3,
+      "bass": 4,
+      "guitar": 5,
+      "drums": 5,
+      "plasticVocals": 4,
+      "plasticBass": 4,
+      "plasticGuitar": 4,
+      "plasticDrums": 5
+    },
+    "createdAt": "2025-03-14T00:01:15.751Z",
+    "lastFeatured": "2026-07-02T00:01:27.717Z",
+    "previewUrl": "https://p.scdn.co/mp3-preview/b56ce8c209cf8dd61d685b16465fb90c15cadcf6"
+  },
+  "worldismine": {
+    "id": "worldismine",
+    "title": "World Is Mine",
+    "artist": "ryo (supercell) ft. Hatsune Miku",
+    "releaseYear": 2008,
+    "cover": "https://cdn2.unrealengine.com/t9xsbeembvwzvdu0-512x512-7b9e159582b6.jpg",
+    "bpm": 165,
+    "duration": "4m 15s",
+    "difficulties": {
+      "vocals": 4,
+      "bass": 4,
+      "guitar": 4,
+      "drums": 5,
+      "plasticVocals": 4,
+      "plasticBass": 4,
+      "plasticGuitar": 5,
+      "plasticDrums": 4
+    },
+    "createdAt": "2025-01-14T15:53:40.455Z",
+    "lastFeatured": "2026-09-11T00:01:11.675Z",
+    "previewUrl": "https://p.scdn.co/mp3-preview/3d63184820bf27e2ba0caf45f43db0b167f524ea"
+  },
   "badguy": {
     "id": "badguy",
     "title": "bad guy",
@@ -641,28 +773,6 @@
     "lastFeatured": "2026-09-03T00:00:55.006Z",
     "previewUrl": null
   },
-  "popular": {
-    "id": "popular",
-    "title": "Popular",
-    "artist": "The Weeknd, Madonna & Playboi Carti",
-    "releaseYear": 2023,
-    "cover": "https://cdn2.unrealengine.com/p44g8btrzrhnoakn-512x512-6c15bc6c4e55.jpg",
-    "bpm": 99,
-    "duration": "3m 41s",
-    "difficulties": {
-      "vocals": 4,
-      "bass": 0,
-      "guitar": 3,
-      "drums": 4,
-      "plasticVocals": 3,
-      "plasticBass": 0,
-      "plasticGuitar": 1,
-      "plasticDrums": 3
-    },
-    "createdAt": "2024-12-26T04:08:19.835Z",
-    "lastFeatured": "2026-09-07T00:01:15.419Z",
-    "previewUrl": "https://p.scdn.co/mp3-preview/3bb12d1f2bdfd7eaf80d8502fe28806a422d8e5c"
-  },
   "ithinkimokay": {
     "id": "ithinkimokay",
     "title": "I Think I'm OKAY",
@@ -728,5 +838,27 @@
     "createdAt": "2024-12-26T04:08:19.835Z",
     "lastFeatured": "2026-09-11T00:01:11.675Z",
     "previewUrl": "https://p.scdn.co/mp3-preview/db8102ea01ab5e48d0b01214e408b6ba6db50442"
+  },
+  "hegetsmesohigh": {
+    "id": "hegetsmesohigh",
+    "title": "He Gets Me So High",
+    "artist": "beabadoobee",
+    "releaseYear": 2021,
+    "cover": "https://cdn2.unrealengine.com/r0xcstiy4jkirv8l-512x512-5ec17a0e40ca.jpg",
+    "bpm": 136,
+    "duration": "2m 46s",
+    "difficulties": {
+      "vocals": 2,
+      "bass": 1,
+      "guitar": 2,
+      "drums": 3,
+      "plasticVocals": 2,
+      "plasticBass": 1,
+      "plasticGuitar": 2,
+      "plasticDrums": 2
+    },
+    "createdAt": "2026-06-17T00:00:59.630Z",
+    "lastFeatured": null,
+    "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview124/v4/0d/9d/53/0d9d537d-1d45-3041-ec7b-c5b36dc2c263/mzaf_6790352217032010308.plus.aac.p.m4a"
   }
 }
