@@ -72,7 +72,11 @@
     "pealikeme", "returnofthetiger", "findthefury", "youreallmine", "forlatveria",
     "change", "magentaride", "somp", "dreamer", "sunnyssong", "bouncinback",
     "thenightporter", "racetothehorizon", "highstakesclub", "turnup", "beyondtheflame",
-    "thehuntingground"
+    "thehuntingground",
+    // Epic-commissioned Battle Pass / Item Shop tracks credited to fictional
+    // in-game bands rather than "Epic Games". Not streaming releases, so they
+    // can never match on Spotify.
+    "runamok"
   ]);
 
   // Licensed library/stock or branded tracks that reliably fail streaming match.
@@ -114,12 +118,6 @@
       artist: "Chorus - Hercules",
       album: "Hercules (Original Motion Picture Soundtrack)",
       note: "Spotify credits the soundtrack chorus/performers rather than the generic Fortnite cast name."
-    }),
-    alias("World Is Mine", "ryo (supercell) ft. Hatsune Miku", {
-      title: "World is Mine",
-      artist: "Hatsune Miku",
-      album: "supercell",
-      note: "Vocaloid tracks often match better under Hatsune Miku."
     }),
     alias("Today is Gonna be a Great Day", "Bowling For Soup", {
       title: "Today is Gonna be a Great Day - Theme Song to Phineas and Ferb",
@@ -169,6 +167,30 @@
       album: "Alter Ego",
       note: "Try the base title if the Fortnite version is unavailable."
     }),
+    alias("Locked & Loaded", "d4vd", {
+      title: "Locked & Loaded (Official Fortnite Anthem)",
+      artist: "d4vd",
+      album: "Locked & Loaded (Official Fortnite Anthem)",
+      note: "Released on streaming with the Official Fortnite Anthem subtitle."
+    }),
+    alias("A Bar Song", "Shaboozey", {
+      title: "A Bar Song (Tipsy)",
+      artist: "Shaboozey",
+      album: "Where I've Been, Isn't Where I'm Going",
+      note: "Fortnite drops the (Tipsy) subtitle the single is released under."
+    }),
+    alias("Rocket Man", "Elton John", {
+      title: "Rocket Man (I Think It's Going To Be A Long Long Time)",
+      artist: "Elton John",
+      album: "Honky Chateau",
+      note: "Fortnite shows the short title; streaming uses the full one."
+    }),
+    alias("Popular", "The Weeknd, Madonna & Playboi Carti", {
+      title: "Popular",
+      artist: "The Weeknd",
+      album: "The Idol Episode 3 (Original Soundtrack)",
+      note: "Searching the lead artist alone avoids the multi-artist credit order."
+    }),
     alias("What Is Love", "Haddaway", {
       title: "What Is Love",
       artist: "Haddaway",
@@ -184,6 +206,7 @@
     noPreview: "No Spotify preview URL in dataset",
     missingPreview: "Missing Spotify preview URL",
     regex: "Removed by your custom exclude regex",
+    notFound: "Your import tool could not find this track",
     forcedIn: "Kept by you",
     forcedOut: "Removed by you",
     ready: "Ready for export"
@@ -283,10 +306,12 @@
     requirePreview: false,
     useAliases: true,
     includeReviewInExport: false,
+    sendAlbums: false,
     customRegex: "",
     sort: "addedAsc",
     target: "soundiiz",
-    overrides: {}
+    overrides: {},
+    failures: {}
   };
 
   function withDefaults(options) {
@@ -298,6 +323,7 @@
       if (options[name] !== undefined) merged[name] = options[name];
     });
     merged.overrides = merged.overrides || {};
+    merged.failures = merged.failures || {};
     return merged;
   }
 
@@ -470,6 +496,12 @@
         status = "exclude";
         source = "override";
         reasons.unshift(REASONS.forcedOut);
+      } else if (opts.failures[info.key]) {
+        // Reported by the import tool as not found. A manual Keep still wins,
+        // so a track can be forced back in after being marked failed.
+        status = "exclude";
+        source = "notFound";
+        reasons.unshift(REASONS.notFound);
       } else if (regexHit) {
         status = "exclude";
         source = "regex";
@@ -555,7 +587,9 @@
         return {
           title: applied ? applied.title : track.title,
           artist: applied ? applied.artist : track.artist,
-          album: applied ? applied.album || "" : "",
+          // The album column is opt-in: it can only narrow an import tool's
+          // search, and a wrong album name turns a findable track into a miss.
+          album: opts.sendAlbums && applied ? applied.album || "" : "",
           originalTitle: track.title,
           originalArtist: track.artist,
           addedToFortnite: formatDate(track.createdAt),
@@ -587,9 +621,10 @@
       // TuneMyMusic matches these column names, and the same spelling is what
       // its own CSV exports use. A lowercase "artist,title,album" header is not
       // one it recognizes.
-      lines = ["Track name,Artist name,Album"];
+      lines = [opts.sendAlbums ? "Track name,Artist name,Album" : "Track name,Artist name"];
       (rows || []).forEach(function (row) {
-        lines.push([row.title, row.artist, row.album].map(csvEscape).join(","));
+        var cells = opts.sendAlbums ? [row.title, row.artist, row.album] : [row.title, row.artist];
+        lines.push(cells.map(csvEscape).join(","));
       });
       return {
         target: target,
@@ -635,13 +670,14 @@
     // Soundiiz. It matches columns by name and ignores ones it does not know,
     // so only the columns we can actually fill are emitted.
     //
-    // The previous header was "title,artist,album,isrc," which declared a
+    // The original header was "title,artist,album,isrc," which declared a
     // fifth, nameless column Soundiiz discards, and an isrc column this data
     // source can never populate. Both were dropped: they only added two empty
-    // commas to every line.
-    lines = ["title,artist,album"];
+    // commas to every line. The album column is opt-in for the same reason.
+    lines = [opts.sendAlbums ? "title,artist,album" : "title,artist"];
     (rows || []).forEach(function (row) {
-      lines.push([row.title, row.artist, row.album].map(csvEscape).join(","));
+      var cells = opts.sendAlbums ? [row.title, row.artist, row.album] : [row.title, row.artist];
+      lines.push(cells.map(csvEscape).join(","));
     });
     return {
       target: "soundiiz",
@@ -703,11 +739,26 @@
       .replace(/\s*ft\..*/i, "")
       .replace(/\s*feat\..*/i, "")
       .trim();
+
+    // Trimming a credit out of "Tasty Bois (ft. Backchat)" used to leave the
+    // opening bracket behind, producing "Tasty Bois (". Drop any bracket left
+    // unclosed by the trim.
+    nextArtist = dropUnclosedBracket(nextArtist);
+
     return {
       title: nextTitle || title,
       artist: nextArtist || artist,
       note: "Automatic cleanup: removed subtitles/featured credits where possible."
     };
+  }
+
+  function dropUnclosedBracket(value) {
+    var text = String(value === null || value === undefined ? "" : value);
+    var open = text.lastIndexOf("(");
+    if (open !== -1 && text.indexOf(")", open) === -1) {
+      text = text.slice(0, open);
+    }
+    return text.replace(/[\s,&-]+$/, "").trim();
   }
 
   // Turn Soundiiz's isFound=0 export into better retry searches.
@@ -733,6 +784,85 @@
       });
       return out;
     }, []);
+  }
+
+  /*
+   * Read an import tool's result CSV and pick out the rows it could not match.
+   *
+   * Accepts Soundiiz's export, which appends an `isFound` column (1 found,
+   * 0 not found). When there is no isFound column every row is treated as a
+   * failure, so a hand-trimmed list of just the misses also works.
+   */
+  function parseFailureRows(csvText) {
+    var rows = parseCsv(csvText);
+    if (!rows.length) return [];
+
+    var header = rows[0].map(clean);
+    var looksLikeHeader = header.indexOf("title") !== -1 || header.indexOf("artist") !== -1;
+    var titleIndex = looksLikeHeader && header.indexOf("title") !== -1 ? header.indexOf("title") : 0;
+    var artistIndex = looksLikeHeader && header.indexOf("artist") !== -1 ? header.indexOf("artist") : 1;
+    var foundIndex = looksLikeHeader ? header.indexOf("isfound") : -1;
+    var body = looksLikeHeader ? rows.slice(1) : rows;
+
+    return body.reduce(function (out, cells) {
+      var title = display(cells[titleIndex]);
+      if (!title) return out;
+      // Only skip a row when the file explicitly says it was found.
+      if (foundIndex !== -1 && clean(cells[foundIndex]) === "1") return out;
+      out.push({ title: title, artist: display(cells[artistIndex]) });
+      return out;
+    }, []);
+  }
+
+  /*
+   * Map those failed rows back onto tracks.
+   *
+   * The pasted CSV holds whatever was exported, which may be an aliased title,
+   * so each track is indexed under both its exported form and its original
+   * Fortnite form. Artist-less and artist-mismatched rows fall back to a
+   * title-only match, which is why the result reports what it could not place.
+   */
+  function matchFailures(decisions, options, csvText) {
+    var opts = withDefaults(options);
+    var byPair = new Map();
+    var byTitle = new Map();
+
+    (decisions || []).forEach(function (decision) {
+      var track = decision.track;
+      var applied = effectiveAlias(decision.alias, opts.useAliases);
+      var forms = [[track.title, track.artist]];
+      if (applied) forms.push([applied.title, applied.artist]);
+      forms.forEach(function (form) {
+        byPair.set(trackKey(form[0], form[1]), decision.key);
+        var titleOnly = clean(form[0]);
+        if (!byTitle.has(titleOnly)) byTitle.set(titleOnly, []);
+        byTitle.get(titleOnly).push(decision.key);
+      });
+    });
+
+    var failures = {};
+    var matched = 0;
+    var unmatched = [];
+
+    parseFailureRows(csvText).forEach(function (row) {
+      var key = byPair.get(trackKey(row.title, row.artist));
+      if (!key) {
+        // Fall back to the title alone, but only when it is unambiguous.
+        var candidates = byTitle.get(clean(row.title)) || [];
+        var unique = candidates.filter(function (value, index) {
+          return candidates.indexOf(value) === index;
+        });
+        if (unique.length === 1) key = unique[0];
+      }
+      if (key) {
+        if (!failures[key]) matched += 1;
+        failures[key] = true;
+      } else {
+        unmatched.push(row);
+      }
+    });
+
+    return { failures: failures, matched: matched, unmatched: unmatched };
   }
 
   function formatRetries(suggestions) {
@@ -789,8 +919,11 @@
 
     parseCsv: parseCsv,
     fallbackAlias: fallbackAlias,
+    dropUnclosedBracket: dropUnclosedBracket,
     suggestRetries: suggestRetries,
-    formatRetries: formatRetries
+    formatRetries: formatRetries,
+    parseFailureRows: parseFailureRows,
+    matchFailures: matchFailures
   };
 
   if (typeof window !== "undefined") window.JamTracks = JamTracks;

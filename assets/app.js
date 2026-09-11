@@ -17,6 +17,7 @@
     metadata: {},
     decisions: [],
     overrides: {},
+    failures: {},
     statusFilter: null,
     exportFile: { text: "", filename: "fortnite-jam-tracks.csv", mime: "text/csv;charset=utf-8", label: "Preview", count: 0 },
     retryText: ""
@@ -145,9 +146,11 @@
       includeAmbiguous: checkboxValue("includeAmbiguous"),
       requirePreview: checkboxValue("requirePreview"),
       useAliases: checkboxValue("useAliases"),
+      sendAlbums: checkboxValue("sendAlbums"),
       includeReviewInExport: checkboxValue("includeReviewInExport"),
       customRegex: (el("customRegex") || {}).value || "",
-      overrides: state.overrides
+      overrides: state.overrides,
+      failures: state.failures
     };
   }
 
@@ -256,6 +259,20 @@
     var overrideTotal = Object.keys(state.overrides).length;
     text("overrideCount", overrideTotal);
     show(el("clearOverridesButton"), overrideTotal > 0);
+
+    var droppedTotal = state.decisions.filter(function (decision) {
+      return decision.source === "notFound";
+    }).length;
+    var failureTotal = Object.keys(state.failures).length;
+    show(el("failureNotice"), failureTotal > 0);
+    if (failureTotal > 0) {
+      // Phrased as a state, not a delta: a track your import tool missed may
+      // already have been excluded for another reason, so the included count
+      // can move by less than this number.
+      text("failureNoticeText",
+        droppedTotal + (droppedTotal === 1 ? " track is" : " tracks are") +
+        " excluded because your import tool could not find them.");
+    }
 
     renderTable();
   }
@@ -384,7 +401,7 @@
 
     if (!raw) {
       state.retryText = "";
-      if (output) output.value = "Paste the not-found CSV from Soundiiz first.";
+      if (output) output.value = "Paste the result CSV from your import tool first.";
       return;
     }
 
@@ -393,6 +410,46 @@
     if (output) {
       output.value = state.retryText || "No usable rows found in that CSV.";
     }
+  }
+
+  // Read the import tool's result CSV and drop what it could not find.
+  function dropFailures() {
+    var input = el("notFoundInput");
+    var raw = input ? input.value.trim() : "";
+    var output = el("notFoundOutput");
+
+    if (!raw) {
+      if (output) output.value = "Paste the result CSV from your import tool first.";
+      return;
+    }
+
+    var result = core.matchFailures(state.decisions, getOptions(), raw);
+    if (!result.matched && !result.unmatched.length) {
+      if (output) output.value = "That CSV has no unmatched rows, so there is nothing to drop.";
+      return;
+    }
+
+    state.failures = result.failures;
+    render();
+
+    var lines = ["Marked " + result.matched + " track" + (result.matched === 1 ? "" : "s") +
+      " as not found, and left them out of the export."];
+    if (result.unmatched.length) {
+      lines.push("");
+      lines.push(result.unmatched.length + " row" + (result.unmatched.length === 1 ? "" : "s") +
+        " could not be matched to a Jam Track and were left alone:");
+      result.unmatched.forEach(function (row) {
+        lines.push("  " + (row.artist ? row.artist + " - " : "") + row.title);
+      });
+    }
+    if (output) output.value = lines.join("\n") + "\n";
+  }
+
+  function clearFailures() {
+    state.failures = {};
+    render();
+    var output = el("notFoundOutput");
+    if (output) output.value = "Dropped tracks are back in the export.";
   }
 
   function copyToClipboard(value, button) {
@@ -429,10 +486,12 @@
     });
     on("sortSelect", "change", render);
 
-    core.SWITCH_IDS.concat(["useAliases"]).forEach(function (id) {
+    // useAliases and sendAlbums are formatting choices, not part of what a
+    // preset decides, so they do not flip the preset to Custom.
+    var FORMAT_SWITCHES = ["useAliases", "sendAlbums"];
+    core.SWITCH_IDS.concat(FORMAT_SWITCHES).forEach(function (id) {
       on(id, "change", function () {
-        // Touching a switch by hand means the choice is no longer a preset.
-        if (id !== "useAliases") setRadio("preset", "custom");
+        if (FORMAT_SWITCHES.indexOf(id) === -1) setRadio("preset", "custom");
         render();
       });
     });
@@ -467,6 +526,8 @@
       });
     });
     on("analyzeNotFoundButton", "click", analyzeNotFound);
+    on("dropFailuresButton", "click", dropFailures);
+    on("clearFailuresButton", "click", clearFailures);
     on("copyRetryButton", "click", function (event) {
       copyToClipboard(state.retryText || (el("notFoundOutput") || {}).value, event.currentTarget);
     });

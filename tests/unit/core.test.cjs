@@ -375,13 +375,22 @@ test("an unknown sort falls back to addedAsc instead of throwing", () => {
 
 /* -------------------------------------------------------------- alias rows */
 
-test("selectRows substitutes alias metadata when aliases are on", () => {
+test("selectRows substitutes alias title and artist when aliases are on", () => {
   const options = optionsFor("recommended", { useAliases: true });
   const row = core
     .selectRows(core.decide(TRACKS, options), options)
     .find((r) => r.originalTitle === "Work Work");
   assert.equal(row.title, "Work Bitch");
   assert.equal(row.artist, "Britney Spears");
+  assert.equal(row.album, "", "the album is opt-in and off by default");
+});
+
+test("sendAlbums adds the alias album without touching title or artist", () => {
+  const options = optionsFor("recommended", { useAliases: true, sendAlbums: true });
+  const row = core
+    .selectRows(core.decide(TRACKS, options), options)
+    .find((r) => r.originalTitle === "Work Work");
+  assert.equal(row.title, "Work Bitch");
   assert.equal(row.album, "Britney Jean");
 });
 
@@ -419,8 +428,8 @@ test("includeReviewInExport decides whether review tracks reach the file", () =>
 
 const NOW = new Date("2026-03-04T12:00:00.000Z");
 
-function exportFor(target, preset) {
-  const options = optionsFor(preset || "recommended", { target });
+function exportFor(target, preset, extra) {
+  const options = optionsFor(preset || "recommended", Object.assign({ target }, extra));
   const decisions = core.decide(TRACKS, options);
   const rows = core.selectRows(decisions, options);
   return core.buildExport(target, rows, decisions, options, NOW);
@@ -428,17 +437,37 @@ function exportFor(target, preset) {
 
 test("the Soundiiz header declares only columns we can fill", () => {
   const file = exportFor("soundiiz");
-  // Soundiiz matches columns by name and ignores unknown ones, so a nameless
-  // trailing column and an isrc this data source cannot populate are dropped.
-  assert.equal(file.text.split("\n")[0], "title,artist,album");
+  // Soundiiz matches columns by name and ignores unknown ones. A nameless
+  // trailing column and an isrc this data source cannot populate are gone,
+  // and album is opt-in, so the default export is two columns.
+  assert.equal(file.text.split("\n")[0], "title,artist");
   assert.equal(file.filename, "fortnite-jam-tracks-soundiiz-2026-03-04.csv");
   assert.equal(file.mime, "text/csv;charset=utf-8");
 });
 
-test("every Soundiiz row has exactly three fields", () => {
-  const lines = exportFor("soundiiz").text.trim().split("\n");
-  for (const line of lines) {
+test("every Soundiiz row has exactly two fields by default", () => {
+  for (const line of exportFor("soundiiz").text.trim().split("\n")) {
+    assert.equal(core.parseCsv(line)[0].length, 2, `wrong field count: ${line}`);
+  }
+});
+
+test("sendAlbums restores the album column on both CSV targets", () => {
+  const withAlbums = { sendAlbums: true };
+  assert.equal(exportFor("soundiiz", "recommended", withAlbums).text.split("\n")[0],
+    "title,artist,album");
+  assert.equal(exportFor("tunemymusicCsv", "recommended", withAlbums).text.split("\n")[0],
+    "Track name,Artist name,Album");
+  for (const line of exportFor("soundiiz", "recommended", withAlbums).text.trim().split("\n")) {
     assert.equal(core.parseCsv(line)[0].length, 3, `wrong field count: ${line}`);
+  }
+});
+
+test("with albums off, no export line carries a trailing comma at all", () => {
+  // This is what the empty album/isrc columns used to leave on every line.
+  for (const target of ["soundiiz", "tunemymusicCsv"]) {
+    for (const line of exportFor(target).text.trim().split("\n")) {
+      assert.ok(!line.endsWith(","), `${target} line ends in a comma: ${line}`);
+    }
   }
 });
 
@@ -463,7 +492,7 @@ test("no export line ends in a run of empty fields", () => {
 
 test("the TuneMyMusic CSV uses the column names TuneMyMusic recognizes", () => {
   const file = exportFor("tunemymusicCsv");
-  assert.equal(file.text.split("\n")[0], "Track name,Artist name,Album");
+  assert.equal(file.text.split("\n")[0], "Track name,Artist name");
   assert.equal(file.filename, "fortnite-jam-tracks-tunemymusic-2026-03-04.csv");
 });
 
@@ -497,15 +526,14 @@ test("an unknown target falls back to Soundiiz", () => {
   const decisions = core.decide(TRACKS, options);
   const file = core.buildExport("nonsense", core.selectRows(decisions, options), decisions, options, NOW);
   assert.equal(file.target, "soundiiz");
-  assert.equal(file.text.split("\n")[0], "title,artist,album");
+  assert.equal(file.text.split("\n")[0], "title,artist");
 });
 
 test("the TuneMyMusic CSV puts the track in the Track name column", () => {
   // The header changed from artist-first to title-first, so the row order had
   // to change with it.
-  const rows = core.parseCsv(exportFor("tunemymusicCsv").text);
-  const header = rows[0];
-  assert.equal(header[0], "Track name");
+  const rows = core.parseCsv(exportFor("tunemymusicCsv", "recommended", { sendAlbums: true }).text);
+  assert.equal(rows[0][0], "Track name");
   const row = rows.slice(1).find((cells) => cells[0] === "Work Bitch");
   assert.ok(row, "expected the aliased track in the export");
   assert.equal(row[1], "Britney Spears");
@@ -565,7 +593,7 @@ test("the review CSV reports the title the export will really contain", () => {
 });
 
 test("the review CSV agrees with the export for every aliased track", () => {
-  const options = optionsFor("complete", { useAliases: true });
+  const options = optionsFor("complete", { useAliases: true, sendAlbums: true });
   const decisions = core.decide(TRACKS, options);
   const rows = core.selectRows(decisions, options);
   const csv = core.parseCsv(core.buildExport("reviewCsv", rows, decisions, options, NOW).text);
@@ -604,6 +632,136 @@ test("ORIGINAL_IDS still pins a track by its id", () => {
   assert.equal(core.decide(tracks, optionsFor("recommended"))[0].status, "exclude");
 });
 
+/* ------------------------------------- Fortnite originals by fictional band */
+
+test("an Epic Battle Pass track credited to a fictional band is excluded", () => {
+  // "Runamok" by "Tasty Bois (ft. Backchat)" is a Battle Pass / Item Shop
+  // track, not a streaming release, and Soundiiz could not find it. Nothing
+  // about its artist string marks it as Epic's, so it is pinned by id.
+  const decisions = core.decide(TRACKS, optionsFor("recommended"));
+  const hit = findByTitle(decisions, "Runamok");
+  assert.equal(hit.status, "exclude");
+  assert.ok(hit.reasons.includes(core.REASONS.original));
+});
+
+test("the pinned Fortnite original comes back under Complete", () => {
+  const decisions = core.decide(TRACKS, optionsFor("complete"));
+  assert.equal(findByTitle(decisions, "Runamok").status, "include");
+});
+
+/* ------------------------------------------- aliases from the first import */
+
+test("titles Fortnite shortens are expanded to their streaming form", () => {
+  const options = optionsFor("recommended", { useAliases: true });
+  const rows = core.selectRows(core.decide(TRACKS, options), options);
+  const by = (original) => rows.find((r) => r.originalTitle === original);
+
+  assert.equal(by("Locked & Loaded").title, "Locked & Loaded (Official Fortnite Anthem)");
+  assert.equal(by("A Bar Song").title, "A Bar Song (Tipsy)");
+  assert.equal(by("Rocket Man").title, "Rocket Man (I Think It's Going To Be A Long Long Time)");
+});
+
+test("a multi-artist credit is reduced to the lead artist", () => {
+  const options = optionsFor("recommended", { useAliases: true });
+  const rows = core.selectRows(core.decide(TRACKS, options), options);
+  const row = rows.find((r) => r.originalTitle === "Popular");
+  assert.equal(row.originalArtist, "The Weeknd, Madonna & Playboi Carti");
+  assert.equal(row.artist, "The Weeknd");
+});
+
+test("World Is Mine keeps the raw artist string that actually matches", () => {
+  // "Melt" by the same artist string imported fine with no alias, while the
+  // rewritten "World Is Mine" did not, so the rewrite was removed.
+  const options = optionsFor("recommended", { useAliases: true });
+  const rows = core.selectRows(core.decide(TRACKS, options), options);
+  const world = rows.find((r) => r.originalTitle === "World Is Mine");
+  const melt = rows.find((r) => r.originalTitle === "Melt");
+  assert.equal(world.artist, "ryo (supercell) ft. Hatsune Miku");
+  assert.equal(world.artist, melt.artist, "both should use the same artist string");
+});
+
+/* --------------------------------------------------- import failure loop */
+
+const RESULT_CSV = [
+  "title,artist,album,isrc,isFound",
+  'Mood,"24kGoldn ft. iann dior",,,1',
+  '"Work Bitch","Britney Spears",,,1',
+  'Runamok,"Tasty Bois (ft. Backchat)",,,0',
+  '"He Gets Me So High",beabadoobee,,,0',
+  '"Not A Jam Track","Nobody At All",,,0'
+].join("\n") + "\n";
+
+test("parseFailureRows keeps only the rows marked not found", () => {
+  const rows = core.parseFailureRows(RESULT_CSV);
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows.map((r) => r.title).sort(),
+    ["He Gets Me So High", "Not A Jam Track", "Runamok"]);
+});
+
+test("parseFailureRows treats a file with no isFound column as all failures", () => {
+  const rows = core.parseFailureRows('title,artist\n"Rocket Man","Elton John"\n');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].title, "Rocket Man");
+});
+
+test("matchFailures maps failed rows back and reports what it could not place", () => {
+  const options = optionsFor("complete");
+  const decisions = core.decide(TRACKS, options);
+  const result = core.matchFailures(decisions, options, RESULT_CSV);
+
+  assert.equal(result.matched, 2, "Runamok and He Gets Me So High are real tracks");
+  assert.equal(result.unmatched.length, 1);
+  assert.equal(result.unmatched[0].title, "Not A Jam Track");
+});
+
+test("matchFailures recognises a track by its aliased export title", () => {
+  // The pasted CSV contains whatever was exported, which may be an alias.
+  const options = optionsFor("recommended", { useAliases: true });
+  const decisions = core.decide(TRACKS, options);
+  const result = core.matchFailures(decisions, options,
+    'title,artist,isFound\n"A Bar Song (Tipsy)",Shaboozey,0\n');
+
+  assert.equal(result.matched, 1);
+  assert.equal(result.unmatched.length, 0);
+  assert.ok(result.failures[core.trackKey("A Bar Song", "Shaboozey")],
+    "should resolve to the original Fortnite track");
+});
+
+test("dropping failures removes exactly those tracks from the export", () => {
+  const options = optionsFor("complete");
+  const decisions = core.decide(TRACKS, options);
+  const before = core.selectRows(decisions, options).length;
+  const result = core.matchFailures(decisions, options, RESULT_CSV);
+
+  const after = optionsFor("complete", { failures: result.failures });
+  const rebuilt = core.decide(TRACKS, after);
+  assert.equal(core.selectRows(rebuilt, after).length, before - result.matched);
+
+  for (const decision of rebuilt.filter((d) => d.source === "notFound")) {
+    assert.equal(decision.status, "exclude");
+    assert.ok(decision.reasons.includes(core.REASONS.notFound));
+  }
+});
+
+test("a manual Keep overrules a not-found drop", () => {
+  const key = core.trackKey("He Gets Me So High", "beabadoobee");
+  const options = optionsFor("complete", {
+    failures: { [key]: true },
+    overrides: { [key]: "include" }
+  });
+  const hit = findByTitle(core.decide(TRACKS, options), "He Gets Me So High");
+  assert.equal(hit.status, "include");
+  assert.equal(hit.source, "override");
+});
+
+test("an empty result CSV changes nothing", () => {
+  const options = optionsFor("complete");
+  const decisions = core.decide(TRACKS, options);
+  const result = core.matchFailures(decisions, options, "");
+  assert.deepEqual(result.failures, {});
+  assert.equal(result.matched, 0);
+});
+
 /* --------------------------------------------------------------- CSV parse */
 
 test("parseCsv handles quotes, escaped quotes, embedded commas and CRLF", () => {
@@ -623,12 +781,18 @@ test("parseCsv returns nothing for empty input", () => {
 /* -------------------------------------------------------- not-found helper */
 
 test("suggestRetries uses a curated alias when one exists", () => {
-  const out = core.suggestRetries(
-    'title,artist,album,isrc,isFound\n"World Is Mine","ryo (supercell) ft. Hatsune Miku",,,0\n'
-  );
+  const out = core.suggestRetries('title,artist,album,isrc,isFound\n"A Bar Song",Shaboozey,,,0\n');
   assert.equal(out.length, 1);
-  assert.equal(out[0].retry, "Hatsune Miku - World is Mine");
-  assert.match(out[0].note, /Vocaloid/);
+  assert.equal(out[0].retry, "Shaboozey - A Bar Song (Tipsy)");
+  assert.match(out[0].note, /Tipsy/);
+});
+
+test("a credit inside brackets does not leave a dangling bracket", () => {
+  // "Tasty Bois (ft. Backchat)" used to become "Tasty Bois (".
+  assert.equal(core.fallbackAlias("Runamok", "Tasty Bois (ft. Backchat)").artist, "Tasty Bois");
+  assert.equal(core.dropUnclosedBracket("Tasty Bois ("), "Tasty Bois");
+  assert.equal(core.dropUnclosedBracket("Someone (Live)"), "Someone (Live)");
+  assert.equal(core.dropUnclosedBracket("Plain Name"), "Plain Name");
 });
 
 test("suggestRetries strips featured credits and orchestra suffixes otherwise", () => {

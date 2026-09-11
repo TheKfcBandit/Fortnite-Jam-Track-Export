@@ -63,6 +63,7 @@
           <label class="switch"><input type="checkbox" id="includeAmbiguous" /> <span>Include hard-to-match library tracks</span></label>
           <label class="switch"><input type="checkbox" id="requirePreview" /> <span>Only tracks with a Spotify preview</span></label>
           <label class="switch"><input type="checkbox" id="useAliases" checked /> <span>Fix known bad titles automatically</span></label>
+          <label class="switch"><input type="checkbox" id="sendAlbums" /> <span>Send album names <small>(narrows the search &mdash; can help a generic title or cause a miss)</small></span></label>
           <label class="switch"><input type="checkbox" id="includeReviewInExport" /> <span>Put "needs review" tracks in the file too</span></label>
         </div>
 
@@ -135,21 +136,28 @@
                   placeholder="Waiting for track data…"></textarea>
       </label>
 
-      <details class="advanced">
-        <summary>Some songs weren't found by Soundiiz?</summary>
+      <details class="advanced" id="notFoundPanel">
+        <summary>Some songs didn't import?</summary>
         <p class="lede small">
-          Paste the not-found CSV that Soundiiz gives you (the rows with <code>isFound=0</code>).
-          You'll get cleaner searches to retry, using the same title fixes this app applies.
+          Paste the result CSV your import tool gives back. Soundiiz marks each row
+          <code>isFound=1</code> or <code>isFound=0</code>, and only the <code>0</code> rows are used
+          &mdash; so you can paste the whole file. Then either retry the misses with cleaner
+          searches, or drop them and download a file with nothing broken in it.
         </p>
         <label class="field">
-          <span>Soundiiz not-found CSV</span>
+          <span>Import result CSV</span>
           <textarea id="notFoundInput" spellcheck="false"
-                    placeholder="title,artist,album,isrc,isFound&#10;&quot;World Is Mine&quot;,&quot;ryo (supercell) ft. Hatsune Miku&quot;,,,0"></textarea>
+                    placeholder="title,artist,album,isrc,isFound&#10;Mood,&quot;24kGoldn ft. iann dior&quot;,,,1&#10;Runamok,&quot;Tasty Bois (ft. Backchat)&quot;,,,0"></textarea>
         </label>
         <div class="actions">
+          <button type="button" id="dropFailuresButton" class="button primary">Drop these and rebuild my file</button>
           <button type="button" id="analyzeNotFoundButton" class="button">Suggest retries</button>
           <button type="button" id="copyRetryButton" class="button ghost">Copy retries</button>
         </div>
+        <p class="notice" id="failureNotice" role="status" aria-live="polite" hidden>
+          <span id="failureNoticeText"></span>
+          <button type="button" id="clearFailuresButton" class="button ghost small">Put them back</button>
+        </p>
         <label class="field output-field">
           <span>Retry these searches</span>
           <textarea id="notFoundOutput" spellcheck="false" readonly></textarea>

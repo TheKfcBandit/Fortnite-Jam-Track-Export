@@ -162,8 +162,8 @@ test("each destination produces its own format and filename", async (t) => {
   const { page } = await openWizard(t);
 
   const expected = {
-    soundiiz: { header: "title,artist,album", label: "Soundiiz CSV preview" },
-    tunemymusicCsv: { header: "Track name,Artist name,Album", label: "TuneMyMusic CSV preview" },
+    soundiiz: { header: "title,artist", label: "Soundiiz CSV preview" },
+    tunemymusicCsv: { header: "Track name,Artist name", label: "TuneMyMusic CSV preview" },
     reviewCsv: {
       header: "status,title,artist,exportTitle,exportArtist,album,addedToFortnite,releaseYear,note",
       label: "Review CSV preview"
@@ -447,8 +447,8 @@ test("Download file saves the export under a dated name", async (t) => {
   const saved = path.join(os.tmpdir(), `jam-${Date.now()}.csv`);
   await download.saveAs(saved);
   const body = fs.readFileSync(saved, "utf8");
-  assert.equal(body.split("\n")[0], "title,artist,album");
-  assert.ok(!/,,$/.test(body.split("\n")[1]), "rows must not end in empty columns");
+  assert.equal(body.split("\n")[0], "title,artist");
+  assert.ok(!body.split("\n")[1].endsWith(","), "rows must not end in an empty column");
   assert.equal(body, await preview(page), "the file must match the preview");
   fs.unlinkSync(saved);
 });
@@ -489,23 +489,121 @@ test("Copy to clipboard copies the export", async (t) => {
 test("the not-found helper suggests better searches", async (t) => {
   const { page } = await openWizard(t);
   await goToStep(page, 4);
-  await page.click("text=Some songs weren't found by Soundiiz?");
+  await page.click("text=Some songs didn't import?");
 
   await page.fill("#notFoundInput",
-    'title,artist,album,isrc,isFound\n"World Is Mine","ryo (supercell) ft. Hatsune Miku",,,0\n');
+    'title,artist,album,isrc,isFound\n"A Bar Song",Shaboozey,,,0\n');
   await page.click("#analyzeNotFoundButton");
 
   const output = await page.inputValue("#notFoundOutput");
-  assert.match(output, /Hatsune Miku - World is Mine/);
-  assert.match(output, /# .*Vocaloid/);
+  assert.match(output, /Shaboozey - A Bar Song \(Tipsy\)/);
+  assert.match(output, /# .*Tipsy/);
 });
 
 test("the not-found helper asks for input when given none", async (t) => {
   const { page } = await openWizard(t);
   await goToStep(page, 4);
-  await page.click("text=Some songs weren't found by Soundiiz?");
+  await page.click("text=Some songs didn't import?");
   await page.click("#analyzeNotFoundButton");
-  assert.match(await page.inputValue("#notFoundOutput"), /Paste the not-found CSV/);
+  assert.match(await page.inputValue("#notFoundOutput"), /Paste the result CSV/);
+});
+
+/* -------------------------------------------------------- the album switch */
+
+test("Send album names adds the album column, and is off by default", async (t) => {
+  const { page } = await openWizard(t);
+  await goToStep(page, 4);
+  assert.equal((await preview(page)).split("\n")[0], "title,artist");
+
+  await goToStep(page, 2);
+  await page.click("#advanced summary");
+  assert.equal(await page.isChecked("#sendAlbums"), false, "album is opt-in");
+  await page.check("#sendAlbums");
+
+  await goToStep(page, 4);
+  const withAlbums = await preview(page);
+  assert.equal(withAlbums.split("\n")[0], "title,artist,album");
+  assert.ok(withAlbums.includes("Work Bitch,Britney Spears,Britney Jean"));
+});
+
+test("the album switch does not flip the preset to Custom", async (t) => {
+  const { page } = await openWizard(t);
+  await goToStep(page, 2);
+  await page.check('input[name="preset"][value="recommended"]');
+  await page.click("#advanced summary");
+  await page.check("#sendAlbums");
+  assert.equal(await page.isChecked('input[name="preset"][value="recommended"]'), true,
+    "formatting switches are not part of a preset");
+});
+
+/* ------------------------------------------------- import failure feedback */
+
+const RESULT_CSV = [
+  "title,artist,album,isrc,isFound",
+  'Mood,"24kGoldn ft. iann dior",,,1',
+  '"He Gets Me So High",beabadoobee,,,0',
+  '"Not A Jam Track","Nobody At All",,,0'
+].join("\n");
+
+test("pasting an import result drops the tracks it could not find", async (t) => {
+  const { page } = await openWizard(t);
+  await goToStep(page, 4);
+  const before = await count(page, "includedCount");
+
+  await page.click("text=Some songs didn't import?");
+  await page.fill("#notFoundInput", RESULT_CSV);
+  await page.click("#dropFailuresButton");
+
+  // Only the row that maps to a real Jam Track is dropped.
+  assert.equal(await count(page, "includedCount"), before - 1);
+  assert.match(await page.textContent("#failureNoticeText"), /1 track is excluded/);
+
+  const output = await page.inputValue("#notFoundOutput");
+  assert.match(output, /Marked 1 track as not found/);
+  assert.match(output, /Not A Jam Track/, "unmatched rows are reported, not silently ignored");
+  assert.ok(!(await preview(page)).includes("He Gets Me So High"));
+});
+
+test("Put them back restores the dropped tracks", async (t) => {
+  const { page } = await openWizard(t);
+  await goToStep(page, 4);
+  const before = await count(page, "includedCount");
+
+  await page.click("text=Some songs didn't import?");
+  await page.fill("#notFoundInput", RESULT_CSV);
+  await page.click("#dropFailuresButton");
+  assert.equal(await count(page, "includedCount"), before - 1);
+  assert.equal(await page.isVisible("#failureNotice"), true);
+
+  await page.click("#clearFailuresButton");
+  assert.equal(await count(page, "includedCount"), before);
+  assert.equal(await page.isVisible("#failureNotice"), false);
+  assert.ok((await preview(page)).includes("He Gets Me So High"));
+});
+
+test("a dropped track shows its reason, and a manual Keep still wins", async (t) => {
+  const { page } = await openWizard(t);
+  await goToStep(page, 4);
+  await page.click("text=Some songs didn't import?");
+  await page.fill("#notFoundInput", RESULT_CSV);
+  await page.click("#dropFailuresButton");
+
+  await goToStep(page, 3);
+  await page.fill("#searchInput", "He Gets Me So High");
+  const row = page.locator("#trackTableBody tr").first();
+  assert.match(await row.textContent(), /could not find/);
+
+  await row.locator('button[data-act="keep"]').click();
+  assert.equal(await page.locator(".status.include").count(), 1);
+});
+
+test("the Fortnite Battle Pass original is excluded by default", async (t) => {
+  const { page } = await openWizard(t);
+  await goToStep(page, 3);
+  await page.fill("#searchInput", "Runamok");
+  assert.match(await page.locator("#trackTableBody tr").first().textContent(), /exclude/);
+  await goToStep(page, 4);
+  assert.ok(!(await preview(page)).includes("Runamok"));
 });
 
 /* ------------------------------------------------------- failure handling */

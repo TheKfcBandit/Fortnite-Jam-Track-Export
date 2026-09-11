@@ -25,19 +25,26 @@ explanation and a small demo dataset so the wizard stays usable.
 
 | Destination | Header |
 | --- | --- |
-| Soundiiz CSV | `title,artist,album` |
+| Soundiiz CSV | `title,artist` |
 | TuneMyMusic text | none — `Artist - Title`, one per line |
-| TuneMyMusic CSV | `Track name,Artist name,Album` |
+| TuneMyMusic CSV | `Track name,Artist name` |
 | Review CSV | `status,title,artist,exportTitle,exportArtist,album,addedToFortnite,releaseYear,note` — every track and why it was kept or dropped |
 
-Both importers match columns **by name**, not position, so each export declares only
-the columns this data source can actually fill. `album` is populated for the tracks that
-have a matching alias and empty otherwise; the dataset carries no ISRCs, so no `isrc`
-column is emitted.
+Both importers match columns **by name**, not position, so each export declares only the
+columns it needs. The dataset carries no ISRCs, so no `isrc` column is emitted.
 
 `Track name` / `Artist name` is the spelling TuneMyMusic recognizes and the spelling its
 own CSV exports use. Soundiiz ignores columns it does not recognize, so a lowercase
-`title,artist,album` header is fine there.
+`title,artist` header is fine there.
+
+### Why there is no album column by default
+
+An album can only *narrow* an import tool's search, never widen it, and the album names
+here are hand-written rather than taken from the streaming service. In a real 599-track
+Soundiiz import, three of the nine misses were tracks where this app had supplied an album
+the service disagreed with. Turn on **Send album names** in Fine-tune if you want it — it
+genuinely helps a generic title — but it is off by default because a wrong album turns a
+findable track into a miss.
 
 ## Presets
 
@@ -52,25 +59,33 @@ in the main export.
 Spotify matching.
 
 **Custom** is whatever you set the Fine-tune switches to. Touching any switch by hand
-selects it automatically.
+selects it automatically — except **Fix known bad titles** and **Send album names**, which
+are formatting choices rather than a decision about which songs to include.
 
 ### How a track's status is decided
 
 Highest precedence first:
 
 1. Your **Keep** / **Drop** choice from the review table
-2. The custom exclude filter
-3. "Only tracks with a Spotify preview", when a track has no preview URL
-4. Epic/Fortnite original
-5. Fortnite-specific remix or rearrangement
-6. Hard-to-match library/stock track → **review**
-7. Otherwise → **include**
+2. Tracks your import tool reported as not found (see below)
+3. The custom exclude filter
+4. "Only tracks with a Spotify preview", when a track has no preview URL
+5. Epic/Fortnite original
+6. Fortnite-specific remix or rearrangement
+7. Hard-to-match library/stock track → **review**
+8. Otherwise → **include**
 
 "Epic/Fortnite original" is decided by the track's artist, plus a small set of pinned
 track **ids** in `core.js` for anything credited to someone else. That set is matched
 against ids only — several of its entries (`change`, `dreamer`, `bloom`, `runit`,
 `turnup`) are ordinary song titles, so comparing titles against it would silently drop
 real licensed songs.
+
+The id pins exist because some Epic-commissioned tracks are credited to fictional in-game
+bands rather than "Epic Games" — `Runamok` by "Tasty Bois (ft. Backchat)" is a Battle Pass
+/ Item Shop track with nothing in its artist string to give it away, and it can never match
+on a streaming service. If you find another, add its id to `ORIGINAL_IDS`, or just drop it
+with the custom exclude filter.
 
 ## Custom exclude filter
 
@@ -96,16 +111,38 @@ metadata — they exist to improve import-tool search queries for known-difficul
 - `Yoru Ni Kakeru` → `夜に駆ける` by YOASOBI
 - `Takaneno Hanakosan` → `高嶺の花子さん` by back number
 - `Surround Sound` by `JID ft. 21 Savage & Baby Tate` → `Surround Sound (feat. 21 Savage & Baby Tate)` by JID
+- `A Bar Song` → `A Bar Song (Tipsy)` by Shaboozey
+- `Rocket Man` → `Rocket Man (I Think It's Going To Be A Long Long Time)` by Elton John
+- `Locked & Loaded` → `Locked & Loaded (Official Fortnite Anthem)` by d4vd
+- `Popular` by `The Weeknd, Madonna & Playboi Carti` → the lead artist alone, `The Weeknd`
+
+Aliases can also make matching *worse*. `World Is Mine` used to be rewritten to
+`Hatsune Miku`, and failed — while `Melt`, credited to the same raw
+`ryo (supercell) ft. Hatsune Miku` string, matched with no alias at all. That rewrite was
+removed. Every alias here is only as good as the last real import that tested it.
 
 Turn them off with "Fix known bad titles automatically". A few aliases are marked
 review-only: they're shown as a hint but never substituted into an export, because the
 Fortnite version isn't a normal streaming release.
 
-## Soundiiz not-found helper
+## When songs don't import
 
-Soundiiz can export the rows it failed to match (`isFound=0`). Paste that CSV into the
-helper on step 4 and you get cleaner retry searches, using the same alias rules plus
-automatic cleanup of featured credits and Fortnite subtitles.
+No import is perfect. A real 599-track Soundiiz run matched 590 and missed 9 — titles
+Fortnite displays in shortened form, a multi-artist credit in the wrong order, and one
+Fortnite-exclusive track that simply does not exist on streaming.
+
+Soundiiz hands back a result CSV with an `isFound` column. Paste the **whole file** into
+the panel on step 4 — only the `isFound=0` rows are read — and you get two options:
+
+- **Drop these and rebuild my file** marks those tracks as not found and leaves them out,
+  so you can download a clean file and import it without hitting the same errors. Rows that
+  don't match any Jam Track are reported rather than silently ignored, and **Put them back**
+  reverses it. A manual **Keep** on step 3 still overrules a drop.
+- **Suggest retries** gives cleaner searches for the misses, using the same alias rules plus
+  automatic cleanup of featured credits and Fortnite subtitles.
+
+The pasted CSV holds whatever was exported, which may be an aliased title, so each track is
+looked up under both its exported and its original Fortnite form.
 
 ## Host on GitHub Pages
 
@@ -137,14 +174,14 @@ to how the page is really served.
 Unit tests need nothing but Node 18+:
 
 ```bash
-npm test          # 78 unit tests against assets/core.js
+npm test          # 94 unit tests against assets/core.js
 ```
 
 The browser tests need Playwright:
 
 ```bash
 npm install
-npm run test:e2e  # 29 end-to-end tests driving index.html in Chromium
+npm run test:e2e  # 35 end-to-end tests driving index.html in Chromium
 npm run test:all  # both suites
 ```
 
