@@ -162,8 +162,8 @@ test("each destination produces its own format and filename", async (t) => {
   const { page } = await openWizard(t);
 
   const expected = {
-    soundiiz: { header: "title,artist,album,isrc,", label: "Soundiiz CSV preview" },
-    tunemymusicCsv: { header: "artist,title,album", label: "TuneMyMusic CSV preview" },
+    soundiiz: { header: "title,artist,album", label: "Soundiiz CSV preview" },
+    tunemymusicCsv: { header: "Track name,Artist name,Album", label: "TuneMyMusic CSV preview" },
     reviewCsv: {
       header: "status,title,artist,exportTitle,exportArtist,album,addedToFortnite,releaseYear,note",
       label: "Review CSV preview"
@@ -447,7 +447,8 @@ test("Download file saves the export under a dated name", async (t) => {
   const saved = path.join(os.tmpdir(), `jam-${Date.now()}.csv`);
   await download.saveAs(saved);
   const body = fs.readFileSync(saved, "utf8");
-  assert.equal(body.split("\n")[0], "title,artist,album,isrc,");
+  assert.equal(body.split("\n")[0], "title,artist,album");
+  assert.ok(!/,,$/.test(body.split("\n")[1]), "rows must not end in empty columns");
   assert.equal(body, await preview(page), "the file must match the preview");
   fs.unlinkSync(saved);
 });

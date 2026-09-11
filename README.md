@@ -23,12 +23,21 @@ explanation and a small demo dataset so the wizard stays usable.
 
 ## Export formats
 
-| Destination | Output |
+| Destination | Header |
 | --- | --- |
-| Soundiiz CSV | `title,artist,album,isrc,` (the trailing comma is required by Soundiiz) |
-| TuneMyMusic text | `Artist - Title`, one per line, no header |
-| TuneMyMusic CSV | `artist,title,album` |
+| Soundiiz CSV | `title,artist,album` |
+| TuneMyMusic text | none — `Artist - Title`, one per line |
+| TuneMyMusic CSV | `Track name,Artist name,Album` |
 | Review CSV | `status,title,artist,exportTitle,exportArtist,album,addedToFortnite,releaseYear,note` — every track and why it was kept or dropped |
+
+Both importers match columns **by name**, not position, so each export declares only
+the columns this data source can actually fill. `album` is populated for the tracks that
+have a matching alias and empty otherwise; the dataset carries no ISRCs, so no `isrc`
+column is emitted.
+
+`Track name` / `Artist name` is the spelling TuneMyMusic recognizes and the spelling its
+own CSV exports use. Soundiiz ignores columns it does not recognize, so a lowercase
+`title,artist,album` header is fine there.
 
 ## Presets
 
@@ -56,6 +65,12 @@ Highest precedence first:
 5. Fortnite-specific remix or rearrangement
 6. Hard-to-match library/stock track → **review**
 7. Otherwise → **include**
+
+"Epic/Fortnite original" is decided by the track's artist, plus a small set of pinned
+track **ids** in `core.js` for anything credited to someone else. That set is matched
+against ids only — several of its entries (`change`, `dreamer`, `bloom`, `runit`,
+`turnup`) are ordinary song titles, so comparing titles against it would silently drop
+real licensed songs.
 
 ## Custom exclude filter
 
@@ -122,7 +137,7 @@ to how the page is really served.
 Unit tests need nothing but Node 18+:
 
 ```bash
-npm test          # 71 unit tests against assets/core.js
+npm test          # 78 unit tests against assets/core.js
 ```
 
 The browser tests need Playwright:
