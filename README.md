@@ -25,26 +25,29 @@ explanation and a small demo dataset so the wizard stays usable.
 
 | Destination | Header |
 | --- | --- |
-| Soundiiz CSV | `title,artist` |
+| Soundiiz CSV | `title,artist` plus `album` / `isrc` when something fills them |
 | TuneMyMusic text | none — `Artist - Title`, one per line |
-| TuneMyMusic CSV | `Track name,Artist name` |
-| Review CSV | `status,title,artist,exportTitle,exportArtist,album,addedToFortnite,releaseYear,note` — every track and why it was kept or dropped |
+| TuneMyMusic CSV | `Track name,Artist name` plus `Album` / `ISRC` when filled |
+| Review CSV | `status,title,artist,exportTitle,exportArtist,album,isrc,source,addedToFortnite,releaseYear,note` |
 
-Both importers match columns **by name**, not position, so each export declares only the
-columns it needs. The dataset carries no ISRCs, so no `isrc` column is emitted.
+Both importers match columns **by name**, not position, and ignore columns they do not
+recognise. So the header is exactly the columns that carry data: a column appears only
+once at least one row fills it. The original `title,artist,album,isrc,` header declared a
+fifth, nameless column and two that nothing ever populated, which is where the `,,,` on
+every line came from.
 
-`Track name` / `Artist name` is the spelling TuneMyMusic recognizes and the spelling its
-own CSV exports use. Soundiiz ignores columns it does not recognize, so a lowercase
-`title,artist` header is fine there.
+Once a lookup supplies an ISRC, the `isrc` column appears and rows without one carry an
+empty field — that is just how a rectangular CSV works, and those columns are now paying
+for themselves instead of being empty everywhere.
 
-### Why there is no album column by default
+### Albums are per-alias, not a setting
 
-An album can only *narrow* an import tool's search, never widen it, and the album names
-here are hand-written rather than taken from the streaming service. In a real 599-track
-Soundiiz import, three of the nine misses were tracks where this app had supplied an album
-the service disagreed with. Turn on **Send album names** in Fine-tune if you want it — it
-genuinely helps a generic title — but it is off by default because a wrong album turns a
-findable track into a miss.
+Two real imports settled this. The first sent album names, the second did not. Of the
+thirteen aliased tracks carrying an album, **nine matched either way, three failed either
+way, and exactly one matched only when the album was supplied** — `Lapti Nek`. So the album
+lives on that one alias and nowhere else. The global "send albums" switch that briefly
+existed was the wrong control: it turned a per-track property into a global one, and
+defaulting it off is what broke `Lapti Nek`.
 
 ## Presets
 
@@ -104,45 +107,64 @@ than filtering anything.
 
 ## Matching aliases
 
-Aliases are intentionally small and readable. They don't claim to be perfect streaming
-metadata — they exist to improve import-tool search queries for known-difficult entries:
+A small table of corrections for titles Fortnite displays differently from the streaming
+services. They are search hints, not authoritative metadata:
 
 - `Work Work` → `Work Bitch` by Britney Spears (Fortnite censors the display title)
 - `Yoru Ni Kakeru` → `夜に駆ける` by YOASOBI
-- `Takaneno Hanakosan` → `高嶺の花子さん` by back number
-- `Surround Sound` by `JID ft. 21 Savage & Baby Tate` → `Surround Sound (feat. 21 Savage & Baby Tate)` by JID
 - `A Bar Song` → `A Bar Song (Tipsy)` by Shaboozey
 - `Rocket Man` → `Rocket Man (I Think It's Going To Be A Long Long Time)` by Elton John
 - `Locked & Loaded` → `Locked & Loaded (Official Fortnite Anthem)` by d4vd
-- `Popular` by `The Weeknd, Madonna & Playboi Carti` → the lead artist alone, `The Weeknd`
 
-Aliases can also make matching *worse*. `World Is Mine` used to be rewritten to
-`Hatsune Miku`, and failed — while `Melt`, credited to the same raw
-`ryo (supercell) ft. Hatsune Miku` string, matched with no alias at all. That rewrite was
-removed. Every alias here is only as good as the last real import that tested it.
+Turn them off with "Fix known bad titles automatically". A few are marked review-only:
+shown as a hint, never substituted, because the Fortnite version is not a normal release.
 
-Turn them off with "Fix known bad titles automatically". A few aliases are marked
-review-only: they're shown as a hint but never substituted into an export, because the
-Fortnite version isn't a normal streaming release.
+**Aliases the imports disproved were deleted, not kept.** `World Is Mine` was rewritten to
+`Hatsune Miku` and failed, while `Melt` — credited to the same raw
+`ryo (supercell) ft. Hatsune Miku` string — matched with no alias at all. `Popular` failed
+both as its full multi-artist credit and as the lead artist alone. `What Is Love` failed
+with and without its album. All three are now looked up instead of guessed at.
+
+The table stays deliberately small. A hardcoded alias is a guess that needs a real import
+to test; the lookup is the general answer, and a correction from it always beats an alias.
 
 ## When songs don't import
 
-No import is perfect. A real 599-track Soundiiz run matched 590 and missed 9 — titles
-Fortnite displays in shortened form, a multi-artist credit in the wrong order, and one
-Fortnite-exclusive track that simply does not exist on streaming.
+No import is perfect, and the dataset is the reason: it carries **no streaming identifier
+at all**. `previewUrl` is an audio hash, and 82 of them point at Apple rather than Spotify.
+Everything downstream is therefore a fuzzy text search on Fortnite's display strings.
+
+Two real 598-track Soundiiz imports went 590 then 592. Hand-written aliases fixed three
+tracks and broke a fourth, which is the problem with guessing: each guess costs a full
+import round-trip to test, and nothing converges. So the app asks a real database instead.
+
+### The loop
 
 Soundiiz hands back a result CSV with an `isFound` column. Paste the **whole file** into
-the panel on step 4 — only the `isFound=0` rows are read — and you get two options:
+the panel on step 4 — only the `isFound=0` rows are read — then pick one of:
 
-- **Drop these and rebuild my file** marks those tracks as not found and leaves them out,
-  so you can download a clean file and import it without hitting the same errors. Rows that
-  don't match any Jam Track are reported rather than silently ignored, and **Put them back**
-  reverses it. A manual **Keep** on step 3 still overrules a drop.
-- **Suggest retries** gives cleaner searches for the misses, using the same alias rules plus
-  automatic cleanup of featured credits and Fortnite subtitles.
+- **Look them up** queries a public music database for each miss and shows what it found,
+  with a confidence score. Confident matches are applied automatically; a weak match is
+  shown with a **Use this anyway** button rather than applied behind your back; nothing
+  found and lookup failures are reported as such. **Undo lookups** reverses everything.
+- **Drop these instead** leaves the misses out so you can import a clean file. **Put them
+  back** reverses it, and a manual **Keep** on step 3 still overrules a drop.
+- **Suggest retries** gives cleaner search strings for pasting into a search box by hand.
 
-The pasted CSV holds whatever was exported, which may be an aliased title, so each track is
-looked up under both its exported and its original Fortnite form.
+### The two databases
+
+| | Key needed | ISRC | Speed |
+| --- | --- | --- | --- |
+| Apple / iTunes Search | no | no | fast |
+| MusicBrainz | no | **yes** | ~1 track per second |
+
+An **ISRC** is the prize: import tools match it exactly rather than searching for text, so
+a track with an ISRC cannot be mis-matched. That is why MusicBrainz is worth its rate limit
+on a handful of tracks. Because only the misses are looked up — six, not six hundred — the
+rate limit never bites.
+
+Lookups run in your browser, straight to those public APIs. Still no key, no backend, and
+nothing about you is sent anywhere.
 
 ## Host on GitHub Pages
 
@@ -174,14 +196,14 @@ to how the page is really served.
 Unit tests need nothing but Node 18+:
 
 ```bash
-npm test          # 94 unit tests against assets/core.js
+npm test          # 125 unit tests: assets/core.js and assets/resolve.js
 ```
 
 The browser tests need Playwright:
 
 ```bash
 npm install
-npm run test:e2e  # 35 end-to-end tests driving index.html in Chromium
+npm run test:e2e  # 42 end-to-end tests driving index.html in Chromium
 npm run test:all  # both suites
 ```
 
@@ -197,17 +219,23 @@ references no missing elements — the failure mode that previously left most of
 .
 ├── index.html                        wizard markup
 ├── assets
-│   ├── core.js                       all rules and formats, no DOM
+│   ├── core.js                       filters, presets, exports; no DOM
+│   ├── resolve.js                    music database lookup; no DOM, injected fetch
 │   ├── app.js                        wizard controller, all DOM
 │   └── styles.css
 ├── tests
 │   ├── unit/core.test.cjs
+│   ├── unit/resolve.test.cjs
 │   ├── e2e/wizard.test.cjs
 │   └── fixtures/tracks.sample.json
 ├── package.json                      dev scripts and Playwright
 ├── LICENSE
 └── README.md
 ```
+
+`resolve.js` takes its network access as an injected `fetchJson`, so every query builder,
+response parser and scoring rule is unit-tested with no network at all, and the end-to-end
+tests stub the APIs at the network layer.
 
 `core.js` holds every rule — filters, presets, aliases, sorting, CSV building — and touches
 no DOM, so it's testable in plain Node. `app.js` owns the DOM and nothing else. Every

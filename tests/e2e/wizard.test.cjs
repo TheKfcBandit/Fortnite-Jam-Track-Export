@@ -162,10 +162,10 @@ test("each destination produces its own format and filename", async (t) => {
   const { page } = await openWizard(t);
 
   const expected = {
-    soundiiz: { header: "title,artist", label: "Soundiiz CSV preview" },
-    tunemymusicCsv: { header: "Track name,Artist name", label: "TuneMyMusic CSV preview" },
+    soundiiz: { header: "title,artist,album", label: "Soundiiz CSV preview" },
+    tunemymusicCsv: { header: "Track name,Artist name,Album", label: "TuneMyMusic CSV preview" },
     reviewCsv: {
-      header: "status,title,artist,exportTitle,exportArtist,album,addedToFortnite,releaseYear,note",
+      header: "status,title,artist,exportTitle,exportArtist,album,isrc,source,addedToFortnite,releaseYear,note",
       label: "Review CSV preview"
     }
   };
@@ -447,8 +447,7 @@ test("Download file saves the export under a dated name", async (t) => {
   const saved = path.join(os.tmpdir(), `jam-${Date.now()}.csv`);
   await download.saveAs(saved);
   const body = fs.readFileSync(saved, "utf8");
-  assert.equal(body.split("\n")[0], "title,artist");
-  assert.ok(!body.split("\n")[1].endsWith(","), "rows must not end in an empty column");
+  assert.equal(body.split("\n")[0], "title,artist,album");
   assert.equal(body, await preview(page), "the file must match the preview");
   fs.unlinkSync(saved);
 });
@@ -508,32 +507,46 @@ test("the not-found helper asks for input when given none", async (t) => {
   assert.match(await page.inputValue("#notFoundOutput"), /Paste the result CSV/);
 });
 
-/* -------------------------------------------------------- the album switch */
+/* --------------------------------------------------- data-driven columns */
 
-test("Send album names adds the album column, and is off by default", async (t) => {
+test("the export declares only the columns something fills", async (t) => {
   const { page } = await openWizard(t);
   await goToStep(page, 4);
-  assert.equal((await preview(page)).split("\n")[0], "title,artist");
+  const text = await preview(page);
+  const header = await page.evaluate(() =>
+    window.JamTracks.parseCsv(document.getElementById("outputText").value)[0]);
 
-  await goToStep(page, 2);
-  await page.click("#advanced summary");
-  assert.equal(await page.isChecked("#sendAlbums"), false, "album is opt-in");
-  await page.check("#sendAlbums");
+  // The fixture holds the one aliased track a real import proved needs an
+  // album, so album is present. Nothing supplies an ISRC yet, so it is not.
+  assert.deepEqual(header, ["title", "artist", "album"]);
+  assert.ok(!text.includes("isrc"), "an unfilled column must not appear");
 
-  await goToStep(page, 4);
-  const withAlbums = await preview(page);
-  assert.equal(withAlbums.split("\n")[0], "title,artist,album");
-  assert.ok(withAlbums.includes("Work Bitch,Britney Spears,Britney Jean"));
+  // Every row is exactly as wide as the header.
+  const widths = await page.evaluate(() => {
+    const rows = window.JamTracks.parseCsv(document.getElementById("outputText").value);
+    return Array.from(new Set(rows.map((cells) => cells.length)));
+  });
+  assert.deepEqual(widths, [3], "no ragged rows");
 });
 
-test("the album switch does not flip the preset to Custom", async (t) => {
+test("the album is carried by one alias, not a global switch", async (t) => {
   const { page } = await openWizard(t);
   await goToStep(page, 2);
-  await page.check('input[name="preset"][value="recommended"]');
   await page.click("#advanced summary");
-  await page.check("#sendAlbums");
-  assert.equal(await page.isChecked('input[name="preset"][value="recommended"]'), true,
-    "formatting switches are not part of a preset");
+  // The switch that caused a regression is gone.
+  assert.equal(await page.locator("#sendAlbums").count(), 0);
+
+  await goToStep(page, 4);
+  // Parse with the page's own CSV reader: titles contain commas, so splitting
+  // on "," would count quoted fields as extra columns.
+  const withAlbum = await page.evaluate(() => {
+    const text = document.getElementById("outputText").value;
+    return window.JamTracks.parseCsv(text).slice(1)
+      .filter((cells) => (cells[2] || "").trim())
+      .map((cells) => cells[0]);
+  });
+  assert.equal(withAlbum.length, 1, `expected one album, got ${withAlbum.length}: ${withAlbum}`);
+  assert.match(withAlbum[0], /^Lapti Nek/);
 });
 
 /* ------------------------------------------------- import failure feedback */
@@ -604,6 +617,154 @@ test("the Fortnite Battle Pass original is excluded by default", async (t) => {
   assert.match(await page.locator("#trackTableBody tr").first().textContent(), /exclude/);
   await goToStep(page, 4);
   assert.ok(!(await preview(page)).includes("Runamok"));
+});
+
+/* --------------------------------------------------- music database lookup */
+
+const ITUNES = "https://itunes.apple.com/search**";
+
+function itunesReply(route, results) {
+  return route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ resultCount: results.length, results })
+  });
+}
+
+const song = (trackName, artistName, collectionName) => ({
+  trackName, artistName, collectionName,
+  trackId: 1, trackViewUrl: "https://music.apple.com/track/1"
+});
+
+test("Look them up resolves a miss and puts the real name in the export", async (t) => {
+  const { page } = await openWizard(t);
+
+  // Stand in for Apple's search endpoint.
+  await page.route(ITUNES, (route) => {
+    const term = decodeURIComponent(new URL(route.request().url()).searchParams.get("term") || "");
+    if (/he gets me so high/i.test(term)) {
+      return itunesReply(route, [song("He Gets Me So High", "beabadoobee", "Our Extended Play")]);
+    }
+    return itunesReply(route, []);
+  });
+
+  await goToStep(page, 4);
+  await page.click("text=Some songs didn't import?");
+  await page.fill("#notFoundInput",
+    'title,artist,isFound\n"He Gets Me So High",beabadoobee,0\n');
+  await page.click("#lookupButton");
+
+  await page.waitForSelector('.lookup-row[data-state="resolved"]');
+  const row = page.locator(".lookup-row").first();
+  assert.match(await row.textContent(), /beabadoobee — He Gets Me So High/);
+  assert.match(await page.textContent("#correctionNoticeText"), /1 track is using a name looked up/);
+
+  // The looked-up name is what gets exported.
+  assert.ok((await preview(page)).includes("He Gets Me So High,beabadoobee"));
+});
+
+test("an ISRC from the lookup adds the isrc column and matches exactly", async (t) => {
+  const { page } = await openWizard(t);
+
+  await page.route("https://musicbrainz.org/ws/2/recording**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        recordings: [{
+          id: "abc", score: 100, title: "He Gets Me So High",
+          "artist-credit": [{ name: "beabadoobee" }],
+          releases: [{ title: "Our Extended Play" }],
+          isrcs: ["GBKPL2130123"]
+        }]
+      })
+    }));
+
+  await goToStep(page, 4);
+  const before = (await preview(page)).split("\n")[0];
+  assert.ok(!before.includes("isrc"), "no isrc column before the lookup");
+
+  await page.click("text=Some songs didn't import?");
+  await page.selectOption("#providerSelect", "musicbrainz");
+  await page.fill("#notFoundInput", 'title,artist,isFound\n"He Gets Me So High",beabadoobee,0\n');
+  await page.click("#lookupButton");
+  await page.waitForSelector('.lookup-row[data-state="resolved"]');
+
+  assert.match(await page.textContent(".lookup-row"), /GBKPL2130123/);
+  const text = await preview(page);
+  assert.equal(text.split("\n")[0], "title,artist,album,isrc");
+  assert.ok(text.includes("GBKPL2130123"));
+  assert.match(await page.textContent("#correctionNoticeText"), /with an ISRC for exact matching/);
+});
+
+test("a weak match is offered rather than applied", async (t) => {
+  const { page } = await openWizard(t);
+  await page.route(ITUNES, (route) =>
+    itunesReply(route, [song("Something Else Entirely", "beabadoobee", "Other")]));
+
+  await goToStep(page, 4);
+  await page.click("text=Some songs didn't import?");
+  await page.fill("#notFoundInput", 'title,artist,isFound\n"He Gets Me So High",beabadoobee,0\n');
+  await page.click("#lookupButton");
+
+  await page.waitForSelector('.lookup-row[data-state="uncertain"]');
+  assert.equal(await page.isVisible("#correctionNotice"), false,
+    "an uncertain match must not be applied on its own");
+
+  await page.click("button[data-use]");
+  assert.match(await page.textContent("#correctionNoticeText"), /1 track is using a name/);
+  assert.ok((await preview(page)).includes("Something Else Entirely"));
+});
+
+test("nothing found is reported honestly", async (t) => {
+  const { page } = await openWizard(t);
+  await page.route(ITUNES, (route) => itunesReply(route, []));
+
+  await goToStep(page, 4);
+  await page.click("text=Some songs didn't import?");
+  await page.fill("#notFoundInput", 'title,artist,isFound\n"He Gets Me So High",beabadoobee,0\n');
+  await page.click("#lookupButton");
+
+  await page.waitForSelector('.lookup-row[data-state="none"]');
+  assert.match(await page.textContent(".lookup-row"), /Nothing found/);
+  assert.equal(await page.isVisible("#correctionNotice"), false);
+});
+
+test("an unreachable database says so instead of failing silently", async (t) => {
+  const { page } = await openWizard(t);
+  await page.route(ITUNES, (route) => route.abort("failed"));
+
+  await goToStep(page, 4);
+  await page.click("text=Some songs didn't import?");
+  await page.fill("#notFoundInput", 'title,artist,isFound\n"He Gets Me So High",beabadoobee,0\n');
+  await page.click("#lookupButton");
+
+  await page.waitForSelector('.lookup-row[data-state="error"]');
+  assert.match(await page.textContent(".lookup-row"), /Lookup failed/);
+  assert.equal(await page.isDisabled("#lookupButton"), false, "the button must be usable again");
+});
+
+test("Undo lookups removes the corrections", async (t) => {
+  const { page } = await openWizard(t);
+  await page.route(ITUNES, (route) =>
+    itunesReply(route, [song("He Gets Me So High", "beabadoobee", "Our Extended Play")]));
+
+  await goToStep(page, 4);
+  await page.click("text=Some songs didn't import?");
+  await page.fill("#notFoundInput", 'title,artist,isFound\n"He Gets Me So High",beabadoobee,0\n');
+  await page.click("#lookupButton");
+  await page.waitForSelector('.lookup-row[data-state="resolved"]');
+
+  await page.click("#clearCorrectionsButton");
+  assert.equal(await page.isVisible("#correctionNotice"), false);
+});
+
+test("Look them up needs a pasted result first", async (t) => {
+  const { page } = await openWizard(t);
+  await goToStep(page, 4);
+  await page.click("text=Some songs didn't import?");
+  await page.click("#lookupButton");
+  assert.match(await page.textContent("#lookupResults"), /Paste the result CSV/);
 });
 
 /* ------------------------------------------------------- failure handling */

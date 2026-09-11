@@ -5,7 +5,7 @@
  * The previous version called addEventListener on a missing element inside
  * init(), which threw and silently killed every listener registered after it.
  */
-(function (core) {
+(function (core, resolver) {
   "use strict";
 
   var TOTAL_STEPS = 4;
@@ -18,6 +18,9 @@
     decisions: [],
     overrides: {},
     failures: {},
+    corrections: {},
+    lookups: [],
+    lookupRunning: false,
     statusFilter: null,
     exportFile: { text: "", filename: "fortnite-jam-tracks.csv", mime: "text/csv;charset=utf-8", label: "Preview", count: 0 },
     retryText: ""
@@ -146,11 +149,11 @@
       includeAmbiguous: checkboxValue("includeAmbiguous"),
       requirePreview: checkboxValue("requirePreview"),
       useAliases: checkboxValue("useAliases"),
-      sendAlbums: checkboxValue("sendAlbums"),
       includeReviewInExport: checkboxValue("includeReviewInExport"),
       customRegex: (el("customRegex") || {}).value || "",
       overrides: state.overrides,
-      failures: state.failures
+      failures: state.failures,
+      corrections: state.corrections
     };
   }
 
@@ -259,6 +262,18 @@
     var overrideTotal = Object.keys(state.overrides).length;
     text("overrideCount", overrideTotal);
     show(el("clearOverridesButton"), overrideTotal > 0);
+
+    var correctionTotal = Object.keys(state.corrections).length;
+    show(el("correctionNotice"), correctionTotal > 0);
+    if (correctionTotal > 0) {
+      var withIsrc = Object.keys(state.corrections).filter(function (key) {
+        return state.corrections[key].isrc;
+      }).length;
+      text("correctionNoticeText",
+        correctionTotal + (correctionTotal === 1 ? " track is" : " tracks are") +
+        " using a name looked up in a music database" +
+        (withIsrc ? ", " + withIsrc + " of them with an ISRC for exact matching" : "") + ".");
+    }
 
     var droppedTotal = state.decisions.filter(function (decision) {
       return decision.source === "notFound";
@@ -452,6 +467,179 @@
     if (output) output.value = "Dropped tracks are back in the export.";
   }
 
+  /* ------------------------------------------------------- database lookup */
+
+  function buildProviderSelect() {
+    var select = el("providerSelect");
+    if (!select || !resolver) return;
+    select.innerHTML = Object.keys(resolver.PROVIDERS).map(function (id) {
+      return '<option value="' + escapeHtml(id) + '">' +
+        escapeHtml(resolver.PROVIDERS[id].label) + "</option>";
+    }).join("");
+    select.value = resolver.DEFAULT_PROVIDER;
+    describeProvider();
+  }
+
+  function describeProvider() {
+    if (!resolver) return;
+    var select = el("providerSelect");
+    var provider = resolver.PROVIDERS[(select || {}).value] || resolver.PROVIDERS[resolver.DEFAULT_PROVIDER];
+    text("providerHelp", provider.hasIsrc
+      ? "Returns an ISRC, which import tools match exactly instead of searching. Slower: about one track a second."
+      : "Fast, and covers current releases well, but returns no ISRC.");
+  }
+
+  // The tracks to look up: whatever the pasted result CSV says was not found.
+  function failedTracksFromInput() {
+    var input = el("notFoundInput");
+    var raw = input ? input.value.trim() : "";
+    if (!raw) return { tracks: [], unmatched: [], empty: true };
+
+    var result = core.matchFailures(state.decisions, getOptions(), raw);
+    var wanted = Object.keys(result.failures);
+    var tracks = state.decisions
+      .filter(function (decision) { return wanted.indexOf(decision.key) !== -1; })
+      .map(function (decision) { return decision.track; });
+    return { tracks: tracks, unmatched: result.unmatched, empty: false };
+  }
+
+  function lookupFailures() {
+    if (!resolver) {
+      renderLookupMessage("The lookup module did not load, so this cannot run.");
+      return;
+    }
+    if (state.lookupRunning) return;
+
+    var found = failedTracksFromInput();
+    if (found.empty) {
+      renderLookupMessage("Paste the result CSV from your import tool first.");
+      return;
+    }
+    if (!found.tracks.length) {
+      renderLookupMessage("That CSV has no unmatched rows that map to a Jam Track.");
+      return;
+    }
+
+    state.lookupRunning = true;
+    state.lookups = [];
+    var button = el("lookupButton");
+    if (button) button.disabled = true;
+    show(el("lookupProgress"), true);
+    text("lookupProgressText", "Looking up 0 of " + found.tracks.length + "…");
+
+    var provider = (el("providerSelect") || {}).value || resolver.DEFAULT_PROVIDER;
+
+    resolver.resolveTracks(found.tracks, {
+      provider: provider,
+      fetchJson: resolver.browserFetchJson,
+      isCancelled: function () { return !state.lookupRunning; },
+      onProgress: function (event) {
+        text("lookupProgressText",
+          "Looking up " + event.done + " of " + event.total + "…");
+        state.lookups.push(event.result);
+        renderLookupResults();
+      }
+    }).then(function (results) {
+      finishLookup(results, provider);
+    }, function (error) {
+      finishLookup([], provider, error);
+    });
+  }
+
+  function finishLookup(results, provider, error) {
+    state.lookupRunning = false;
+    var button = el("lookupButton");
+    if (button) button.disabled = false;
+    show(el("lookupProgress"), false);
+
+    if (error) {
+      renderLookupMessage("The lookup could not run: " + (error.message || error) +
+        ". The database may be unreachable from your browser.");
+      return;
+    }
+
+    state.lookups = results;
+    // Apply only the confident matches; anything weaker waits for a person.
+    var applied = resolver.toCorrections(results, function (track) {
+      return core.trackKey(track.title, track.artist);
+    });
+    Object.keys(applied).forEach(function (key) { state.corrections[key] = applied[key]; });
+
+    render();
+    renderLookupResults();
+  }
+
+  function cancelLookup() {
+    state.lookupRunning = false;
+    show(el("lookupProgress"), false);
+    var button = el("lookupButton");
+    if (button) button.disabled = false;
+  }
+
+  function renderLookupMessage(message) {
+    var host = el("lookupResults");
+    if (host) host.innerHTML = '<p class="table-note">' + escapeHtml(message) + "</p>";
+  }
+
+  var STATE_LABEL = {
+    resolved: "Applied",
+    uncertain: "Not sure",
+    none: "Nothing found",
+    error: "Lookup failed"
+  };
+
+  function renderLookupResults() {
+    var host = el("lookupResults");
+    if (!host) return;
+    if (!state.lookups.length) { host.innerHTML = ""; return; }
+
+    host.innerHTML = '<div class="lookup">' + state.lookups.map(function (result) {
+      var track = result.track;
+      var key = core.trackKey(track.title, track.artist);
+      var candidate = result.candidate;
+      var parts = ['<div class="lookup-row" data-state="' + escapeHtml(result.status) + '">'];
+      parts.push('<div class="lookup-from">' + escapeHtml(track.artist + " — " + track.title) + "</div>");
+
+      if (candidate) {
+        parts.push('<div class="lookup-to">' + escapeHtml(candidate.artist + " — " + candidate.title) + "</div>");
+        var meta = [STATE_LABEL[result.status] || result.status,
+                    Math.round((result.confidence || 0) * 100) + "% match"];
+        parts.push('<div class="lookup-meta"><span>' + meta.map(escapeHtml).join("</span><span>") + "</span>" +
+          (candidate.isrc ? '<span class="isrc">ISRC ' + escapeHtml(candidate.isrc) + "</span>" : "") +
+          (candidate.album ? "<span>" + escapeHtml(candidate.album) + "</span>" : "") + "</div>");
+        if (result.status === "uncertain" && !state.corrections[key]) {
+          parts.push('<button type="button" class="button small" data-use="' + escapeHtml(key) + '">Use this anyway</button>');
+        }
+      } else {
+        parts.push('<div class="lookup-meta"><span>' + escapeHtml(STATE_LABEL[result.status] || result.status) +
+          (result.message ? ": " + escapeHtml(result.message) : "") + "</span></div>");
+      }
+      return parts.join("") + "</div>";
+    }).join("") + "</div>";
+  }
+
+  function useUncertain(key) {
+    var hit = state.lookups.filter(function (result) {
+      return core.trackKey(result.track.title, result.track.artist) === key;
+    })[0];
+    if (!hit || !hit.candidate) return;
+    state.corrections[key] = {
+      title: hit.candidate.title,
+      artist: hit.candidate.artist,
+      album: hit.candidate.album || "",
+      isrc: hit.candidate.isrc || "",
+      note: "Accepted from a music database lookup"
+    };
+    render();
+    renderLookupResults();
+  }
+
+  function clearCorrections() {
+    state.corrections = {};
+    render();
+    renderLookupResults();
+  }
+
   function copyToClipboard(value, button) {
     if (!value) {
       flash(button, "Nothing to copy");
@@ -473,6 +661,7 @@
     buildTargetCards();
     buildPresetCards();
     buildSortSelect();
+    buildProviderSelect();
     applyPreset("recommended");
 
     // Step 1: destination.
@@ -486,9 +675,9 @@
     });
     on("sortSelect", "change", render);
 
-    // useAliases and sendAlbums are formatting choices, not part of what a
-    // preset decides, so they do not flip the preset to Custom.
-    var FORMAT_SWITCHES = ["useAliases", "sendAlbums"];
+    // useAliases is a formatting choice, not part of what a preset decides,
+    // so it does not flip the preset to Custom.
+    var FORMAT_SWITCHES = ["useAliases"];
     core.SWITCH_IDS.concat(FORMAT_SWITCHES).forEach(function (id) {
       on(id, "change", function () {
         if (FORMAT_SWITCHES.indexOf(id) === -1) setRadio("preset", "custom");
@@ -527,6 +716,14 @@
     });
     on("analyzeNotFoundButton", "click", analyzeNotFound);
     on("dropFailuresButton", "click", dropFailures);
+    on("lookupButton", "click", lookupFailures);
+    on("cancelLookupButton", "click", cancelLookup);
+    on("clearCorrectionsButton", "click", clearCorrections);
+    on("providerSelect", "change", describeProvider);
+    on("lookupResults", "click", function (event) {
+      var button = event.target.closest("button[data-use]");
+      if (button) useUncertain(button.dataset.use);
+    });
     on("clearFailuresButton", "click", clearFailures);
     on("copyRetryButton", "click", function (event) {
       copyToClipboard(state.retryText || (el("notFoundOutput") || {}).value, event.currentTarget);
@@ -552,4 +749,4 @@
   } else {
     init();
   }
-})(window.JamTracks);
+})(window.JamTracks, window.JamResolve);

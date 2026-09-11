@@ -63,7 +63,6 @@
           <label class="switch"><input type="checkbox" id="includeAmbiguous" /> <span>Include hard-to-match library tracks</span></label>
           <label class="switch"><input type="checkbox" id="requirePreview" /> <span>Only tracks with a Spotify preview</span></label>
           <label class="switch"><input type="checkbox" id="useAliases" checked /> <span>Fix known bad titles automatically</span></label>
-          <label class="switch"><input type="checkbox" id="sendAlbums" /> <span>Send album names <small>(narrows the search &mdash; can help a generic title or cause a miss)</small></span></label>
           <label class="switch"><input type="checkbox" id="includeReviewInExport" /> <span>Put "needs review" tracks in the file too</span></label>
         </div>
 
@@ -150,10 +149,29 @@
                     placeholder="title,artist,album,isrc,isFound&#10;Mood,&quot;24kGoldn ft. iann dior&quot;,,,1&#10;Runamok,&quot;Tasty Bois (ft. Backchat)&quot;,,,0"></textarea>
         </label>
         <div class="actions">
-          <button type="button" id="dropFailuresButton" class="button primary">Drop these and rebuild my file</button>
-          <button type="button" id="analyzeNotFoundButton" class="button">Suggest retries</button>
+          <button type="button" id="lookupButton" class="button primary">Look them up</button>
+          <button type="button" id="dropFailuresButton" class="button">Drop these instead</button>
+          <button type="button" id="analyzeNotFoundButton" class="button ghost">Suggest retries</button>
           <button type="button" id="copyRetryButton" class="button ghost">Copy retries</button>
         </div>
+
+        <label class="field">
+          <span>Look up in</span>
+          <select id="providerSelect"></select>
+          <small id="providerHelp"></small>
+        </label>
+
+        <p class="notice" id="lookupProgress" role="status" aria-live="polite" hidden>
+          <span id="lookupProgressText"></span>
+          <button type="button" id="cancelLookupButton" class="button ghost small">Stop</button>
+        </p>
+
+        <div id="lookupResults"></div>
+
+        <p class="notice" id="correctionNotice" role="status" aria-live="polite" hidden>
+          <span id="correctionNoticeText"></span>
+          <button type="button" id="clearCorrectionsButton" class="button ghost small">Undo lookups</button>
+        </p>
         <p class="notice" id="failureNotice" role="status" aria-live="polite" hidden>
           <span id="failureNoticeText"></span>
           <button type="button" id="clearFailuresButton" class="button ghost small">Put them back</button>
@@ -184,6 +202,7 @@
   </footer>
 
   <script src="assets/core.js"></script>
+  <script src="assets/resolve.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>

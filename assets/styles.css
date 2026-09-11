@@ -282,3 +282,19 @@ td.empty { text-align: center; color: var(--muted-2); padding: 28px 13px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* -------------------------------------------------- database lookup results */
+
+.lookup { margin-bottom: 20px; display: grid; gap: 8px; }
+.lookup-row {
+  display: grid; gap: 4px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel);
+}
+.lookup-row[data-state="resolved"] { border-color: rgba(114, 239, 173, 0.45); }
+.lookup-row[data-state="uncertain"] { border-color: rgba(255, 209, 102, 0.45); }
+.lookup-row[data-state="none"], .lookup-row[data-state="error"] { border-color: rgba(255, 143, 163, 0.4); }
+.lookup-from { font-size: 0.85rem; color: var(--muted-2); }
+.lookup-to { font-weight: 700; }
+.lookup-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 0.8rem; color: var(--muted-2); }
+.lookup-meta .isrc { font-family: var(--mono); color: var(--good); }
+.lookup-row .button { justify-self: start; margin-top: 4px; }

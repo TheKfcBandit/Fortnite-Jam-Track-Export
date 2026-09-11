@@ -97,105 +97,84 @@
     alias("Lapti Nek (Jabba's Palace)", "John Williams & The London Symphony Orchestra", {
       title: "Lapti Nek (Jabba's Palace Band)",
       artist: "John Williams",
+      // The only album this app sends. Two real imports - one with albums,
+      // one without - showed this track matching only when the album is
+      // supplied, while for the other twelve aliases the album changed
+      // nothing. Album is a per-alias property, not a global switch, because
+      // the evidence is per-track.
       album: "Star Wars: Return of the Jedi (Original Motion Picture Soundtrack)",
       note: "Spotify uses Jabba's Palace Band rather than Fortnite's display subtitle."
     }),
     alias("Star Wars Main Title Theme/March of the Resistance (Fortnite Rearrangement)", "John Williams & The London Symphony Orchestra", {
       title: "Main Title and March of the Resistance",
       artist: "John Williams",
-      album: "Star Wars: The Force Awakens",
       reviewOnly: true,
       note: "Fortnite rearrangement is not a normal streaming release; excluded by default."
     }),
     alias("I Won't Say (I'm In Love)", "Hercules Cast", {
       title: 'I Won\'t Say (I\'m In Love) - From "Hercules" / Soundtrack Version',
       artist: "Susan Egan",
-      album: "Hercules (Original Motion Picture Soundtrack)",
       note: "Disney cast credits often match better with the lead performer and soundtrack subtitle."
     }),
     alias("Zero to Hero", "Hercules Cast", {
       title: 'Zero To Hero - From "Hercules" / Soundtrack Version',
       artist: "Chorus - Hercules",
-      album: "Hercules (Original Motion Picture Soundtrack)",
       note: "Spotify credits the soundtrack chorus/performers rather than the generic Fortnite cast name."
     }),
     alias("Today is Gonna be a Great Day", "Bowling For Soup", {
       title: "Today is Gonna be a Great Day - Theme Song to Phineas and Ferb",
       artist: "Bowling For Soup",
-      album: "Phineas and Ferb",
       note: "Spotify includes the Phineas and Ferb subtitle."
     }),
     alias("Takaneno Hanakosan", "back number", {
       title: "高嶺の花子さん",
       artist: "back number",
-      album: "ラブストーリー",
       note: "Spotify/import tools may prefer the original Japanese title."
     }),
     alias("Work Work", "Britney Spears", {
       title: "Work Bitch",
       artist: "Britney Spears",
-      album: "Britney Jean",
       note: "Fortnite uses a censored display title."
     }),
     alias("Happy", "Pharrell Williams", {
       title: 'Happy - From "Despicable Me 2"',
       artist: "Pharrell Williams",
-      album: "G I R L",
       note: "Avoids generic-title matching failures."
     }),
     alias("The Simpsons Main Title Theme", "Danny Elfman", {
       title: "The Simpsons Main Title Theme",
       artist: "Danny Elfman",
-      album: "The Simpsons",
       note: "Adds soundtrack context."
     }),
     alias("Yoru Ni Kakeru", "YOASOBI", {
       title: "夜に駆ける",
       artist: "YOASOBI",
-      album: "THE BOOK",
       note: "Original Japanese title can match better than the romanized Fortnite title."
     }),
     alias("Surround Sound", "JID ft. 21 Savage & Baby Tate", {
       title: "Surround Sound (feat. 21 Savage & Baby Tate)",
       artist: "JID",
-      album: "The Forever Story",
       note: "Move featured artists into the title."
     }),
     alias("FUTW (Vixi Solo Version)", "LISA", {
       title: "FUTW",
       artist: "LISA",
-      album: "Alter Ego",
       note: "Try the base title if the Fortnite version is unavailable."
     }),
     alias("Locked & Loaded", "d4vd", {
       title: "Locked & Loaded (Official Fortnite Anthem)",
       artist: "d4vd",
-      album: "Locked & Loaded (Official Fortnite Anthem)",
       note: "Released on streaming with the Official Fortnite Anthem subtitle."
     }),
     alias("A Bar Song", "Shaboozey", {
       title: "A Bar Song (Tipsy)",
       artist: "Shaboozey",
-      album: "Where I've Been, Isn't Where I'm Going",
       note: "Fortnite drops the (Tipsy) subtitle the single is released under."
     }),
     alias("Rocket Man", "Elton John", {
       title: "Rocket Man (I Think It's Going To Be A Long Long Time)",
       artist: "Elton John",
-      album: "Honky Chateau",
       note: "Fortnite shows the short title; streaming uses the full one."
-    }),
-    alias("Popular", "The Weeknd, Madonna & Playboi Carti", {
-      title: "Popular",
-      artist: "The Weeknd",
-      album: "The Idol Episode 3 (Original Soundtrack)",
-      note: "Searching the lead artist alone avoids the multi-artist credit order."
-    }),
-    alias("What Is Love", "Haddaway", {
-      title: "What Is Love",
-      artist: "Haddaway",
-      album: "The Album",
-      note: "Adds album context for a generic title."
     })
   ]);
 
@@ -306,12 +285,12 @@
     requirePreview: false,
     useAliases: true,
     includeReviewInExport: false,
-    sendAlbums: false,
     customRegex: "",
     sort: "addedAsc",
     target: "soundiiz",
     overrides: {},
-    failures: {}
+    failures: {},
+    corrections: {}
   };
 
   function withDefaults(options) {
@@ -324,6 +303,7 @@
     });
     merged.overrides = merged.overrides || {};
     merged.failures = merged.failures || {};
+    merged.corrections = merged.corrections || {};
     return merged;
   }
 
@@ -443,6 +423,49 @@
   // through this so they can never disagree about what the file will contain.
   function effectiveAlias(aliasData, useAliases) {
     return useAliases && aliasData && !aliasData.reviewOnly ? aliasData : null;
+  }
+
+  /*
+   * What a track is called in the export.
+   *
+   * A correction always wins. Corrections come from looking the track up in a
+   * real music database (see resolve.js) or from the user editing it by hand,
+   * so it is real data rather than a guess baked into this file, and it can
+   * carry an ISRC - which an import tool matches exactly instead of searching.
+   */
+  function resolveRow(decision, options) {
+    var opts = withDefaults(options);
+    var track = decision.track;
+    var correction = opts.corrections[decision.key];
+    if (correction && correction.title) {
+      return {
+        title: display(correction.title),
+        artist: display(correction.artist || track.artist),
+        album: display(correction.album || ""),
+        isrc: display(correction.isrc || ""),
+        note: correction.note || "Looked up in a music database",
+        origin: "correction"
+      };
+    }
+    var applied = effectiveAlias(decision.alias, opts.useAliases);
+    if (applied) {
+      return {
+        title: applied.title,
+        artist: applied.artist,
+        album: applied.album || "",
+        isrc: applied.isrc || "",
+        note: applied.note,
+        origin: "alias"
+      };
+    }
+    return {
+      title: track.title,
+      artist: track.artist,
+      album: "",
+      isrc: "",
+      note: decision.reasons.join("; "),
+      origin: "dataset"
+    };
   }
 
   /* ------------------------------------------------------------------ *
@@ -583,21 +606,43 @@
       })
       .map(function (decision) {
         var track = decision.track;
-        var applied = effectiveAlias(decision.alias, opts.useAliases);
+        var resolved = resolveRow(decision, opts);
         return {
-          title: applied ? applied.title : track.title,
-          artist: applied ? applied.artist : track.artist,
-          // The album column is opt-in: it can only narrow an import tool's
-          // search, and a wrong album name turns a findable track into a miss.
-          album: opts.sendAlbums && applied ? applied.album || "" : "",
+          title: resolved.title,
+          artist: resolved.artist,
+          album: resolved.album,
+          isrc: resolved.isrc,
+          origin: resolved.origin,
           originalTitle: track.title,
           originalArtist: track.artist,
           addedToFortnite: formatDate(track.createdAt),
           releaseYear: track.releaseYear,
           status: decision.status,
-          note: applied ? applied.note : decision.reasons.join("; ")
+          note: resolved.note
         };
       });
+  }
+
+  /*
+   * Which optional columns to emit.
+   *
+   * Both import tools match columns by name and ignore what they do not know,
+   * so an all-empty column is pure noise - that is what the original
+   * "title,artist,album,isrc," header was. A column appears only when at
+   * least one row actually fills it.
+   */
+  function activeColumns(rows) {
+    return {
+      album: (rows || []).some(function (row) { return row.album; }),
+      isrc: (rows || []).some(function (row) { return row.isrc; })
+    };
+  }
+
+  function csvLine(row, columns) {
+    var cells = [row.title, row.artist];
+    if (columns.album) cells.push(row.album || "");
+    if (columns.isrc) cells.push(row.isrc || "");
+    return cells.map(csvEscape).join(",");
   }
 
   function buildExport(target, rows, decisions, options, now) {
@@ -621,10 +666,13 @@
       // TuneMyMusic matches these column names, and the same spelling is what
       // its own CSV exports use. A lowercase "artist,title,album" header is not
       // one it recognizes.
-      lines = [opts.sendAlbums ? "Track name,Artist name,Album" : "Track name,Artist name"];
+      var tmmColumns = activeColumns(rows);
+      var tmmHeader = ["Track name", "Artist name"];
+      if (tmmColumns.album) tmmHeader.push("Album");
+      if (tmmColumns.isrc) tmmHeader.push("ISRC");
+      lines = [tmmHeader.join(",")];
       (rows || []).forEach(function (row) {
-        var cells = opts.sendAlbums ? [row.title, row.artist, row.album] : [row.title, row.artist];
-        lines.push(cells.map(csvEscape).join(","));
+        lines.push(csvLine(row, tmmColumns));
       });
       return {
         target: target,
@@ -637,24 +685,26 @@
     }
 
     if (target === "reviewCsv") {
-      lines = ["status,title,artist,exportTitle,exportArtist,album,addedToFortnite,releaseYear,note"];
+      lines = ["status,title,artist,exportTitle,exportArtist,album,isrc,source,addedToFortnite,releaseYear,note"];
       (decisions || []).forEach(function (decision) {
         var track = decision.track;
-        // exportTitle/exportArtist/album must mirror selectRows exactly, so a
-        // review-only alias shows the Fortnite title here too. Its note is
-        // still surfaced, as a hint.
-        var applied = effectiveAlias(decision.alias, opts.useAliases);
+        // These columns must mirror selectRows exactly, so both go through
+        // resolveRow. A review-only alias therefore shows the Fortnite title
+        // here too, with its note kept as a hint.
+        var resolved = resolveRow(decision, opts);
         var hint = decision.alias && decision.alias.note;
         lines.push([
           decision.status,
           track.title,
           track.artist,
-          applied ? applied.title : track.title,
-          applied ? applied.artist : track.artist,
-          applied ? applied.album || "" : "",
+          resolved.title,
+          resolved.artist,
+          resolved.album,
+          resolved.isrc,
+          resolved.origin,
           formatDate(track.createdAt),
           track.releaseYear || "",
-          applied ? applied.note : decision.reasons.join("; ") || hint || ""
+          resolved.note || hint || ""
         ].map(csvEscape).join(","));
       });
       return {
@@ -671,13 +721,15 @@
     // so only the columns we can actually fill are emitted.
     //
     // The original header was "title,artist,album,isrc," which declared a
-    // fifth, nameless column Soundiiz discards, and an isrc column this data
-    // source can never populate. Both were dropped: they only added two empty
-    // commas to every line. The album column is opt-in for the same reason.
-    lines = [opts.sendAlbums ? "title,artist,album" : "title,artist"];
+    // fifth, nameless column Soundiiz discards plus two columns nothing
+    // filled. The header is now exactly the columns that carry data.
+    var columns = activeColumns(rows);
+    var header = ["title", "artist"];
+    if (columns.album) header.push("album");
+    if (columns.isrc) header.push("isrc");
+    lines = [header.join(",")];
     (rows || []).forEach(function (row) {
-      var cells = opts.sendAlbums ? [row.title, row.artist, row.album] : [row.title, row.artist];
-      lines.push(cells.map(csvEscape).join(","));
+      lines.push(csvLine(row, columns));
     });
     return {
       target: "soundiiz",
@@ -829,9 +881,8 @@
 
     (decisions || []).forEach(function (decision) {
       var track = decision.track;
-      var applied = effectiveAlias(decision.alias, opts.useAliases);
-      var forms = [[track.title, track.artist]];
-      if (applied) forms.push([applied.title, applied.artist]);
+      var resolved = resolveRow(decision, opts);
+      var forms = [[track.title, track.artist], [resolved.title, resolved.artist]];
       forms.forEach(function (form) {
         byPair.set(trackKey(form[0], form[1]), decision.key);
         var titleOnly = clean(form[0]);
@@ -907,6 +958,8 @@
     withDefaults: withDefaults,
     presetSwitches: presetSwitches,
 
+    activeColumns: activeColumns,
+    resolveRow: resolveRow,
     parseTracks: parseTracks,
     compileRegex: compileRegex,
     classify: classify,
