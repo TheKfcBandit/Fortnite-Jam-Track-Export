@@ -56,10 +56,15 @@
    * Curated data
    * ------------------------------------------------------------------ */
 
-  // Supplemental safety net only. Every Epic original in the dataset today is
-  // already caught by the `artist === "Epic Games"` check in classify(); this
-  // set exists so a future original credited to some other artist can be
-  // pinned without a code change to the rules.
+  // Supplemental safety net, matched against a track's `id` ONLY. Every Epic
+  // original in the dataset today is already caught by the
+  // `artist === "Epic Games"` check in classify(); this set exists so a future
+  // original credited to some other artist can be pinned without a code change.
+  //
+  // Do NOT compare a squashed track title against these ids. Several entries
+  // ("change", "dreamer", "bloom", "runit", "turnup") are ordinary song titles,
+  // so a real licensed song called "Change" would be silently dropped as an
+  // Epic original.
   var ORIGINAL_IDS = new Set([
     "butterbarnhoedown", "ogfutureremix", "switchup", "showthemwhoweare", "takemehigher",
     "braceforchaos", "runit", "flickeringflame", "winterfestwish", "makeitknown",
@@ -378,7 +383,6 @@
   // Pure inspection of a single track. Knows nothing about user options.
   function classify(track) {
     var artist = clean(track.artist);
-    var title = clean(track.title);
     var key = trackKey(track.title, track.artist);
     var aliasData = MATCH_ALIASES.get(key) || null;
 
@@ -387,7 +391,7 @@
     var isReviewOnlyAlias = Boolean(aliasData && aliasData.reviewOnly);
 
     var flags = {
-      isOriginal: isEpicArtist || ORIGINAL_IDS.has(clean(track.id)) || ORIGINAL_IDS.has(title.replace(/[^a-z0-9]/g, "")),
+      isOriginal: isEpicArtist || ORIGINAL_IDS.has(clean(track.id)),
       isFortniteEdit:
         isEpicCollab ||
         /fortnite rearrangement/i.test(track.title) ||
@@ -406,6 +410,13 @@
     if (aliasData && !aliasData.reviewOnly) notes.push("Alias available: " + aliasData.note);
 
     return { key: key, flags: flags, notes: notes, alias: aliasData };
+  }
+
+  // The alias an export is allowed to substitute. Review-only aliases are hints
+  // for a human, never substitutions. Both selectRows() and the review CSV go
+  // through this so they can never disagree about what the file will contain.
+  function effectiveAlias(aliasData, useAliases) {
+    return useAliases && aliasData && !aliasData.reviewOnly ? aliasData : null;
   }
 
   /* ------------------------------------------------------------------ *
@@ -540,19 +551,17 @@
       })
       .map(function (decision) {
         var track = decision.track;
-        var aliasData = decision.alias;
-        var useAlias = Boolean(opts.useAliases && aliasData && !aliasData.reviewOnly);
+        var applied = effectiveAlias(decision.alias, opts.useAliases);
         return {
-          title: useAlias ? aliasData.title : track.title,
-          artist: useAlias ? aliasData.artist : track.artist,
-          album: useAlias ? aliasData.album || "" : "",
-          isrc: "",
+          title: applied ? applied.title : track.title,
+          artist: applied ? applied.artist : track.artist,
+          album: applied ? applied.album || "" : "",
           originalTitle: track.title,
           originalArtist: track.artist,
           addedToFortnite: formatDate(track.createdAt),
           releaseYear: track.releaseYear,
           status: decision.status,
-          note: useAlias ? aliasData.note : decision.reasons.join("; ")
+          note: applied ? applied.note : decision.reasons.join("; ")
         };
       });
   }
@@ -575,9 +584,12 @@
     }
 
     if (target === "tunemymusicCsv") {
-      lines = ["artist,title,album"];
+      // TuneMyMusic matches these column names, and the same spelling is what
+      // its own CSV exports use. A lowercase "artist,title,album" header is not
+      // one it recognizes.
+      lines = ["Track name,Artist name,Album"];
       (rows || []).forEach(function (row) {
-        lines.push([row.artist, row.title, row.album].map(csvEscape).join(","));
+        lines.push([row.title, row.artist, row.album].map(csvEscape).join(","));
       });
       return {
         target: target,
@@ -593,17 +605,21 @@
       lines = ["status,title,artist,exportTitle,exportArtist,album,addedToFortnite,releaseYear,note"];
       (decisions || []).forEach(function (decision) {
         var track = decision.track;
-        var aliasData = opts.useAliases ? decision.alias : null;
+        // exportTitle/exportArtist/album must mirror selectRows exactly, so a
+        // review-only alias shows the Fortnite title here too. Its note is
+        // still surfaced, as a hint.
+        var applied = effectiveAlias(decision.alias, opts.useAliases);
+        var hint = decision.alias && decision.alias.note;
         lines.push([
           decision.status,
           track.title,
           track.artist,
-          (aliasData && aliasData.title) || track.title,
-          (aliasData && aliasData.artist) || track.artist,
-          (aliasData && aliasData.album) || "",
+          applied ? applied.title : track.title,
+          applied ? applied.artist : track.artist,
+          applied ? applied.album || "" : "",
           formatDate(track.createdAt),
           track.releaseYear || "",
-          (aliasData && aliasData.note) || decision.reasons.join("; ")
+          applied ? applied.note : decision.reasons.join("; ") || hint || ""
         ].map(csvEscape).join(","));
       });
       return {
@@ -616,11 +632,16 @@
       };
     }
 
-    // Soundiiz. The trailing comma in the header is intentional: Soundiiz
-    // expects a fifth, empty column after isrc.
-    lines = ["title,artist,album,isrc,"];
+    // Soundiiz. It matches columns by name and ignores ones it does not know,
+    // so only the columns we can actually fill are emitted.
+    //
+    // The previous header was "title,artist,album,isrc," which declared a
+    // fifth, nameless column Soundiiz discards, and an isrc column this data
+    // source can never populate. Both were dropped: they only added two empty
+    // commas to every line.
+    lines = ["title,artist,album"];
     (rows || []).forEach(function (row) {
-      lines.push([row.title, row.artist, row.album, row.isrc, ""].map(csvEscape).join(","));
+      lines.push([row.title, row.artist, row.album].map(csvEscape).join(","));
     });
     return {
       target: "soundiiz",

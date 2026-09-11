@@ -426,23 +426,44 @@ function exportFor(target, preset) {
   return core.buildExport(target, rows, decisions, options, NOW);
 }
 
-test("the Soundiiz header keeps its trailing comma", () => {
+test("the Soundiiz header declares only columns we can fill", () => {
   const file = exportFor("soundiiz");
-  assert.equal(file.text.split("\n")[0], "title,artist,album,isrc,");
+  // Soundiiz matches columns by name and ignores unknown ones, so a nameless
+  // trailing column and an isrc this data source cannot populate are dropped.
+  assert.equal(file.text.split("\n")[0], "title,artist,album");
   assert.equal(file.filename, "fortnite-jam-tracks-soundiiz-2026-03-04.csv");
   assert.equal(file.mime, "text/csv;charset=utf-8");
 });
 
-test("every Soundiiz row has five fields", () => {
+test("every Soundiiz row has exactly three fields", () => {
   const lines = exportFor("soundiiz").text.trim().split("\n");
   for (const line of lines) {
-    assert.equal(core.parseCsv(line)[0].length, 5, `wrong field count: ${line}`);
+    assert.equal(core.parseCsv(line)[0].length, 3, `wrong field count: ${line}`);
   }
 });
 
-test("the TuneMyMusic CSV header is artist,title,album", () => {
+test("no export declares a nameless column", () => {
+  // "title,artist,album,isrc," used to add a fifth column with an empty name,
+  // which Soundiiz discards, plus an empty comma on every single line.
+  for (const target of ["soundiiz", "tunemymusicCsv", "reviewCsv"]) {
+    const header = core.parseCsv(exportFor(target).text)[0];
+    for (const name of header) {
+      assert.notEqual(name.trim(), "", `${target} header has an empty column name`);
+    }
+  }
+});
+
+test("no export line ends in a run of empty fields", () => {
+  for (const target of ["soundiiz", "tunemymusicCsv"]) {
+    for (const line of exportFor(target).text.trim().split("\n")) {
+      assert.ok(!/,,$/.test(line), `${target} line has trailing empty columns: ${line}`);
+    }
+  }
+});
+
+test("the TuneMyMusic CSV uses the column names TuneMyMusic recognizes", () => {
   const file = exportFor("tunemymusicCsv");
-  assert.equal(file.text.split("\n")[0], "artist,title,album");
+  assert.equal(file.text.split("\n")[0], "Track name,Artist name,Album");
   assert.equal(file.filename, "fortnite-jam-tracks-tunemymusic-2026-03-04.csv");
 });
 
@@ -476,7 +497,19 @@ test("an unknown target falls back to Soundiiz", () => {
   const decisions = core.decide(TRACKS, options);
   const file = core.buildExport("nonsense", core.selectRows(decisions, options), decisions, options, NOW);
   assert.equal(file.target, "soundiiz");
-  assert.equal(file.text.split("\n")[0], "title,artist,album,isrc,");
+  assert.equal(file.text.split("\n")[0], "title,artist,album");
+});
+
+test("the TuneMyMusic CSV puts the track in the Track name column", () => {
+  // The header changed from artist-first to title-first, so the row order had
+  // to change with it.
+  const rows = core.parseCsv(exportFor("tunemymusicCsv").text);
+  const header = rows[0];
+  assert.equal(header[0], "Track name");
+  const row = rows.slice(1).find((cells) => cells[0] === "Work Bitch");
+  assert.ok(row, "expected the aliased track in the export");
+  assert.equal(row[1], "Britney Spears");
+  assert.equal(row[2], "Britney Jean");
 });
 
 test("commas and quotes in a title survive a CSV round trip", () => {
@@ -513,6 +546,62 @@ test("export row counts follow the include counts", () => {
   const decisions = core.decide(TRACKS, options);
   const counts = core.countByStatus(decisions);
   assert.equal(exportFor("soundiiz").count, counts.include);
+});
+
+test("the review CSV reports the title the export will really contain", () => {
+  // A review-only alias is a hint, never a substitution. The review CSV used
+  // to print the alias title here while the export kept the Fortnite title.
+  const options = optionsFor("complete", { useAliases: true, target: "reviewCsv" });
+  const decisions = core.decide(TRACKS, options);
+  const rows = core.selectRows(decisions, options);
+  const csv = core.parseCsv(core.buildExport("reviewCsv", rows, decisions, options, NOW).text);
+
+  const row = csv.slice(1).find((cells) => cells[1].startsWith("Star Wars Main Title Theme"));
+  const exported = rows.find((r) => r.originalTitle.startsWith("Star Wars Main Title Theme"));
+  assert.equal(row[3], exported.title, "exportTitle must match the exported row");
+  assert.equal(row[4], exported.artist, "exportArtist must match the exported row");
+  // The alias note is still surfaced as guidance.
+  assert.match(row[8], /Fortnite rearrangement/);
+});
+
+test("the review CSV agrees with the export for every aliased track", () => {
+  const options = optionsFor("complete", { useAliases: true });
+  const decisions = core.decide(TRACKS, options);
+  const rows = core.selectRows(decisions, options);
+  const csv = core.parseCsv(core.buildExport("reviewCsv", rows, decisions, options, NOW).text);
+
+  for (const cells of csv.slice(1)) {
+    const exported = rows.find((r) => r.originalTitle === cells[1] && r.originalArtist === cells[2]);
+    if (!exported) continue;
+    assert.equal(cells[3], exported.title, `exportTitle disagrees for ${cells[1]}`);
+    assert.equal(cells[4], exported.artist, `exportArtist disagrees for ${cells[1]}`);
+    assert.equal(cells[5], exported.album, `album disagrees for ${cells[1]}`);
+  }
+});
+
+test("a real song is not mistaken for an Epic original by its title", () => {
+  // ORIGINAL_IDS contains ids like "change", "dreamer" and "bloom" that are
+  // also ordinary song titles. Matching a squashed title against that set
+  // silently dropped real licensed songs.
+  const tracks = core.parseTracks({
+    _metadata: {},
+    realsong: { id: "realsong", title: "Change", artist: "Christina Aguilera", previewUrl: "x" }
+  }).tracks;
+
+  assert.equal(core.classify(tracks[0]).flags.isOriginal, false);
+  const options = optionsFor("recommended");
+  assert.equal(core.decide(tracks, options)[0].status, "include");
+});
+
+test("ORIGINAL_IDS still pins a track by its id", () => {
+  // The id set is the intended escape hatch and must keep working.
+  const tracks = core.parseTracks({
+    _metadata: {},
+    dreamer: { id: "dreamer", title: "Renamed Somehow", artist: "Not Epic", previewUrl: "x" }
+  }).tracks;
+
+  assert.equal(core.classify(tracks[0]).flags.isOriginal, true);
+  assert.equal(core.decide(tracks, optionsFor("recommended"))[0].status, "exclude");
 });
 
 /* --------------------------------------------------------------- CSV parse */
