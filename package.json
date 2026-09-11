@@ -1,0 +1,17 @@
+{
+  "name": "fortnite-jam-track-export",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Static wizard that turns the Fortnite Festival Jam Track catalog into Soundiiz and TuneMyMusic playlist imports.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test \"tests/unit/*.test.cjs\"",
+    "test:unit": "node --test \"tests/unit/*.test.cjs\"",
+    "test:e2e": "node --test \"tests/e2e/*.test.cjs\"",
+    "test:all": "npm run test:unit && npm run test:e2e",
+    "serve": "python3 -m http.server 8080"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}
